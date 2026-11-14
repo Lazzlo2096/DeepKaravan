@@ -71,8 +71,6 @@ services:
       context: .
       dockerfile: celery/Dockerfile
       target: amd
-      args:
-        ROCM_INDEX_URL: ${ROCM_INDEX_URL:-https://download.pytorch.org/whl/rocm6.4}
     devices:
       - /dev/kfd:/dev/kfd
       - /dev/dri:/dev/dri

@@ -1,4 +1,4 @@
-# DeepKaravan
+  # DeepKaravan
 
 Самостоятельный сервис инференса **BAAI/bge-m3**: FastAPI, Pydantic,
 FlagEmbedding, Celery и Redis. Все HTTP-запросы используют одну FIFO-очередь.
@@ -7,6 +7,7 @@ FlagEmbedding, Celery и Redis. Все HTTP-запросы используют 
 ## Запуск на CPU
 
 Нужен Docker с Compose v2 и доступ в интернет для первой загрузки зависимостей и модели.
+Зависимости в образах устанавливаются через uv из общего `uv.lock`.
 
 ```powershell
 Copy-Item .env.example .env
@@ -33,6 +34,62 @@ docker compose down
 `down` сохраняет данные. **`docker compose down -v` удаляет очередь, результаты и кэш модели.**
 Порт Redis не публикуется на хост. API по умолчанию слушает на `127.0.0.1:8000`.
 Для доступа с других машин задайте `API_HOST=0.0.0.0`; авторизации пока нет.
+
+## Команды just
+
+В проекте есть `justfile` для Windows PowerShell и Linux/macOS.
+Нужен [just](https://just.systems/man/en/); для локальных Python-проверок — также `uv`.
+Список команд: `just` или `just --list`.
+
+```powershell
+just up                  # создать .env при отсутствии, собрать и запустить сервисы
+just ps                  # состояние контейнеров
+just logs api celery-cpu # логи выбранных сервисов; just logs — все логи
+just restart api         # перезапустить API
+just down                # остановить сервисы, сохранив данные
+
+just setup               # подготовить .venv с Python 3.12 и зависимости разработки
+just check               # lock-файл, Ruff, форматирование, тесты и проверка Compose
+just test                # только тесты
+just format              # отформатировать Python-код и justfile
+just smoke               # проверить запущенный сервис с настоящей моделью
+```
+
+`just init` сохраняет существующий `.env`. Выбор CPU/AMD остаётся в `.env`.
+Для другого адреса API: `just smoke http://localhost:18091`.
+`just recovery` запускает проверку восстановления на CPU: она останавливает воркер
+и перезапускает Redis, поэтому запускайте её отдельно от клиентской нагрузки.
+
+## Зависимости и uv
+
+Используется Python 3.12, версия указана в `.python-version`.
+Все зависимости объявлены в `pyproject.toml`, а их точные версии и источники
+зафиксированы в `uv.lock`. Оба файла входят в репозиторий.
+
+| Набор | Назначение | Установка |
+| --- | --- | --- |
+| Общие зависимости | Схемы, настройки, Celery, Redis, токенизатор | Устанавливаются всегда |
+| `api` | FastAPI и Uvicorn | `uv sync --locked --no-dev --extra api` |
+| `cpu` | FlagEmbedding и CPU-сборка PyTorch | `uv sync --locked --no-dev --extra cpu` |
+| `amd` | FlagEmbedding, ROCm-сборка PyTorch и Triton; Linux x86_64 | `uv sync --locked --no-dev --extra amd` |
+| `dev` | pytest, Ruff и тестовые зависимости | По умолчанию включён; `--no-dev` исключает его |
+
+Для разработки API и запуска всех тестов достаточно:
+
+```powershell
+uv sync --locked --extra api
+uv run --locked --extra api pytest -q
+```
+
+Этот набор не устанавливает PyTorch и не скачивает веса модели.
+Взаимоисключающие extras `cpu` и `amd` привязаны к разным индексам PyTorch;
+включать их одновременно нельзя. Команда `uv sync` приводит `.venv` в соответствие
+выбранному набору, поэтому для модели и API используйте отдельные окружения/контейнеры.
+
+Локально и при Docker-сборке применяется `--locked`: изменение зависимостей требует
+обновить `uv.lock`. Для этого отредактируйте `pyproject.toml` и выполните `uv lock`
+(или `just lock`). `just lock-check` проверяет актуальность lock-файла.
+Docker-образы используют uv 0.11.29; для локальной разработки нужна эта версия или новее.
 
 ## REST API
 
@@ -151,7 +208,6 @@ API считает длину оригинальным токенизаторо�
 INFERENCE_DEVICE=amd
 COMPOSE_PROFILES=${INFERENCE_DEVICE}
 USE_FP16=true
-ROCM_INDEX_URL=https://download.pytorch.org/whl/rocm6.4
 ```
 
 ```powershell
@@ -163,7 +219,9 @@ Compose подставляет `INFERENCE_DEVICE` в `COMPOSE_PROFILES` и за�
 из `celery-cpu` / `celery-amd`. Не включайте оба профиля и не масштабируйте воркер
 в первой версии. Группы `AMD_VIDEO_GID` и `AMD_RENDER_GID` должны соответствовать хосту.
 По умолчанию используется PyTorch 2.8.0 / ROCm 6.4; другие версии потребуют согласовать
-образ, PyTorch и драйвер с конкретным железом.
+образ, PyTorch и драйвер с конкретным железом. Версии и URL индексов задаются в
+`pyproject.toml`, затем фиксируются командой `uv lock`; после изменения пересоберите
+образы. Индекс не переопределяется через `.env`, чтобы сборка соответствовала lock-файлу.
 
 ROCm использует API `torch.cuda`, поэтому устройство внутри кода — `cuda:0`.
 Выбор `amd` проверяет наличие именно ROCm и доступной GPU; тихого перехода на CPU нет.
@@ -181,6 +239,10 @@ tests/                API, TTL, восстановление выполнени�
 scripts/smoke.py      проверка запущенного сервиса с настоящей моделью
 scripts/check_recovery.py  проверка таймаута и восстановления после сбоев
 compose.yaml          Redis + API + один выбранный воркер
+justfile              команды запуска, логов и проверок
+pyproject.toml        зависимости, extras, настройки проверок и источники PyTorch
+uv.lock               зафиксированные версии и хеши зависимостей
+.python-version       версия Python для uv
 .env.example          настройки и комментарии
 TODO.md               авторизация, webhook и дальнейшая работа
 ```
@@ -193,25 +255,25 @@ TODO.md               авторизация, webhook и дальнейшая р
 Тесты API и обработки задач не скачивают модель и не требуют GPU:
 
 ```powershell
-uv venv --python 3.12
-uv pip install --python .venv/Scripts/python.exe -r requirements-dev.txt
-.venv/Scripts/python.exe -m pytest -q
-.venv/Scripts/ruff.exe check .
-.venv/Scripts/ruff.exe format --check .
+uv sync --locked --extra api
+uv run --locked --extra api pytest -q
+uv run --locked --extra api ruff check .
+uv run --locked --extra api ruff format --check .
+uv lock --check
 docker compose config --quiet
 ```
 
 Проверка запущенного сервиса с настоящей моделью:
 
 ```powershell
-.venv/Scripts/python.exe scripts/smoke.py --base-url http://localhost:8000
+uv run --locked --extra api python scripts/smoke.py --base-url http://localhost:8000
 ```
 
 Проверка восстановления с настоящей моделью (запускайте отдельно от клиентской нагрузки:
 она останавливает CPU-воркер и перезапускает Redis):
 
 ```powershell
-.venv/Scripts/python.exe scripts/check_recovery.py --base-url http://localhost:8000
+uv run --locked --extra api python scripts/check_recovery.py --base-url http://localhost:8000
 ```
 
 Она проверяет настоящий 60-секундный таймаут, сохранение очереди, FIFO, TTL
@@ -221,4 +283,6 @@ docker compose config --quiet
 [BGE-M3](https://bge-model.com/bge/bge_m3.html),
 [Celery / Redis](https://docs.celeryq.dev/en/stable/getting-started/backends-and-brokers/redis.html),
 [Redis persistence](https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/),
+[uv / Docker](https://docs.astral.sh/uv/guides/integration/docker/),
+[uv / PyTorch](https://docs.astral.sh/uv/guides/integration/pytorch/),
 [PyTorch CPU / ROCm](https://pytorch.org/get-started/previous-versions/).

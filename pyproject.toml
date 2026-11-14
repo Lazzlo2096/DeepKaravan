@@ -1,3 +1,70 @@
+[project]
+name = "deepkaravan"
+version = "0.1.0"
+description = "BGE-M3 inference service with FastAPI, Celery and Redis"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "celery[redis]==5.7.0",
+    "redis==6.4.0",
+    "pydantic==2.14.3",
+    "pydantic-settings==2.16.3",
+    "huggingface-hub==0.36.0",
+    "tokenizers==0.22.2",
+]
+
+[project.optional-dependencies]
+api = [
+    "fastapi==0.162.7",
+    "uvicorn==0.54.0",
+]
+cpu = [
+    "FlagEmbedding==1.4.2",
+    "torch==2.8.0",
+]
+amd = [
+    "FlagEmbedding==1.4.2",
+    "torch==2.8.0",
+    "pytorch-triton-rocm==3.4.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.2.0",
+    "httpx==0.28.1",
+    "fakeredis[lua]==2.40.0",
+    "ruff==0.17.5",
+    "numpy==2.4.6",
+]
+
+[tool.uv]
+package = false
+required-version = ">=0.11.29"
+# CPU and ROCm wheels cannot coexist in the same environment.
+conflicts = [[{ extra = "cpu" }, { extra = "amd" }]]
+# Preserve the tested FlagEmbedding stack; these are transitive dependencies.
+constraint-dependencies = [
+    "transformers==4.57.6",
+    "sentence-transformers==5.2.0",
+    "peft==0.18.1",
+]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-rocm", extra = "amd" },
+]
+pytorch-triton-rocm = { index = "pytorch-rocm", extra = "amd" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-rocm"
+url = "https://download.pytorch.org/whl/rocm6.4"
+explicit = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = [".", "celery"]
