@@ -1,0 +1,7 @@
+-r ../common/requirements.txt
+FlagEmbedding==1.4.2
+transformers==4.57.6
+sentence-transformers==5.2.0
+peft==0.18.1
+# Torch is installed separately from the CPU or ROCm index (see Dockerfile).
+torch==2.8.0
