@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     model_id: Literal["BAAI/bge-m3"] = "BAAI/bge-m3"
     model_revision: str = "5617a9f61b028005a4858fdac845db406aefb181"
-    inference_device: Literal["cpu", "amd"] = "cpu"
+    inference_device: Literal["cpu", "amd", "amd-wsl"] = "cpu"
     inference_batch_size: int = Field(default=8, ge=1, le=1024)
     use_fp16: bool = False
     max_texts: int = Field(default=1024, ge=1, le=1024)

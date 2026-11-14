@@ -1,5 +1,0 @@
-# The GPU worker runs natively on Windows and connects through loopback.
-services:
-  redis:
-    ports:
-      - "127.0.0.1:6379:6379"

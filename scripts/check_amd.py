@@ -1,4 +1,4 @@
-"""Fail before startup unless native ROCm can execute work on the AMD GPU."""
+"""Verify that ROCm can execute work on the AMD GPU."""
 
 import torch
 

@@ -21,7 +21,8 @@ def resolve_device(settings: Settings, torch) -> str:
         return "cpu"
     if not torch.version.hip or not torch.cuda.is_available():
         raise RuntimeError(
-            "INFERENCE_DEVICE=amd requires a ROCm build of PyTorch and an accessible AMD GPU"
+            "INFERENCE_DEVICE=amd/amd-wsl requires a ROCm build of PyTorch "
+            "and an accessible AMD GPU"
         )
     # ROCm PyTorch intentionally exposes devices through the torch.cuda API.
     return "cuda:0"

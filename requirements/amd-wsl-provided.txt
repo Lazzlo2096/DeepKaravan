@@ -1,0 +1,3 @@
+# Supplied by the official ROCm PyTorch base image.
+torch
+triton

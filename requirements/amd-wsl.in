@@ -1,0 +1,11 @@
+# Torch and Triton come from the pinned rocm/pytorch Docker image.
+celery[redis]==5.7.0
+redis==6.4.0
+pydantic==2.14.3
+pydantic-settings==2.16.3
+huggingface-hub==0.36.0
+tokenizers==0.22.2
+FlagEmbedding==1.4.2
+transformers==4.57.6
+sentence-transformers==5.2.0
+peft==0.18.1

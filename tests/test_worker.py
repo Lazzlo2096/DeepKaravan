@@ -129,16 +129,18 @@ def test_explicit_cpu_never_auto_selects_gpu(settings):
     assert resolve_device(settings, SimpleNamespace()) == "cpu"
 
 
-def test_amd_uses_rocm_cuda_namespace(settings):
-    settings.inference_device = "amd"
+@pytest.mark.parametrize("device", ["amd", "amd-wsl"])
+def test_amd_uses_rocm_cuda_namespace(settings, device):
+    settings.inference_device = device
     torch = SimpleNamespace(
         version=SimpleNamespace(hip="6.4"), cuda=SimpleNamespace(is_available=lambda: True)
     )
     assert resolve_device(settings, torch) == "cuda:0"
 
 
-def test_amd_refuses_silent_cpu_or_nvidia_fallback(settings):
-    settings.inference_device = "amd"
+@pytest.mark.parametrize("device", ["amd", "amd-wsl"])
+def test_amd_refuses_silent_cpu_or_nvidia_fallback(settings, device):
+    settings.inference_device = device
     torch = SimpleNamespace(
         version=SimpleNamespace(hip=None), cuda=SimpleNamespace(is_available=lambda: True)
     )

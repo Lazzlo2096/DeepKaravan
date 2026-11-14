@@ -79,6 +79,24 @@ services:
       - "${AMD_RENDER_GID:-109}"
     shm_size: 1gb
 
+  celery-amd-wsl:
+    <<: *worker
+    profiles: [amd-wsl]
+    build:
+      context: .
+      dockerfile: celery/Dockerfile.wsl
+    devices:
+      - /dev/dxg:/dev/dxg
+    volumes:
+      - model-cache:/cache/huggingface
+      - type: bind
+        source: /usr/lib/wsl/lib
+        target: /usr/lib/wsl/lib
+        read_only: true
+        bind:
+          create_host_path: false
+    shm_size: 1gb
+
 volumes:
   redis-data:
   model-cache:

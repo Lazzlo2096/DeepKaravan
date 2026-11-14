@@ -6,48 +6,51 @@ FlagEmbedding, Celery и Redis. Все HTTP-запросы используют 
 
 ## Этот компьютер: Windows + Radeon 880M
 
-Для Ryzen AI 9 465 / Radeon 880M GPU-воркер запускается непосредственно в Windows
-с PyTorch 2.9.1 / ROCm 7.2.1. Redis и API работают в Docker Desktop.
-Linux-профиль `amd` с `/dev/kfd` для такого запуска не используется.
-Нужны `uv`, `just`, Docker Desktop и совместимый драйвер AMD.
+Все три сервиса работают в Docker Desktop: Redis, API и `celery-amd-wsl`.
+Celery использует Radeon 880M через WSL `/dev/dxg`, ROCm 7.2.1 и ROCDXG 1.2.2.
+Нужны Docker Desktop с WSL2 и совместимый драйвер AMD. Локальный Python
+для запуска сервиса не требуется.
 
 В `.env`:
 
 ```dotenv
-INFERENCE_DEVICE=amd
-COMPOSE_PROFILES=windows-amd
+INFERENCE_DEVICE=amd-wsl
+COMPOSE_PROFILES=${INFERENCE_DEVICE}
 USE_FP16=true
 INFERENCE_BATCH_SIZE=1
 ```
 
 ```powershell
-just up        # установить GPU-зависимости, проверить GPU, запустить всё
-just ps        # контейнеры и отдельный Windows GPU-воркер
-just logs-gpu  # загрузка модели и выполнение задач
-just logs api  # логи API
-just down      # остановить воркер и контейнеры, сохранив данные
+just up                   # собрать и запустить три контейнера
+just ps                   # состояние контейнеров
+just gpu-check            # проверить вычисление на GPU внутри контейнера
+just logs-gpu             # загрузка модели и выполнение задач
+just restart celery-amd-wsl
+just down                 # остановить всё, сохранив данные
 ```
 
-При первом запуске создаётся отдельная `.venv-amd`, устанавливаются пакеты из
-`requirements/windows-amd.lock` и скачивается модель. Исходный список зависимостей —
-`requirements/windows-amd.txt`; для обновления lock-файла используйте
-`uv pip compile --python .venv-amd/Scripts/python.exe requirements/windows-amd.txt -o requirements/windows-amd.lock`.
-Кэш Windows-воркера хранится
-в `.cache/huggingface`, логи — в `.cache/windows-amd`. `just up` проверяет реальное
-вычисление на GPU; при недоступности GPU запуск завершается ошибкой.
-Повторный `just up` не создаёт второй воркер. Для перезапуска GPU-воркера
-используйте `just down`, затем `just up`; `just restart api` перезапускает только API.
-Redis опубликован только на `127.0.0.1:6379` для подключения Windows-воркера.
-Используйте `just up/down`, чтобы применялся `compose.windows-amd.yaml`.
+Можно использовать напрямую `docker compose up -d --build`.
+Модель готова после сообщения `BGE-M3 is ready` в логах Celery.
+Кэш модели хранится в Docker volume `model-cache`; Redis не публикует порт на хост.
+Нативный Windows-воркер больше не запускается. Старые `.venv-amd` и `.cache/huggingface`
+не используются и могут быть удалены вручную, если не нужны.
 
-Матрица совместимости и инструкция AMD:
-[Ryzen / Windows](https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/docs/compatibility/compatibilityryz/windows/windows_compatibility.html),
-[PyTorch / Windows](https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/docs/install/installryz/windows/install-pytorch.html).
+Образ `celery/Dockerfile.wsl` использует официальный PyTorch-образ AMD;
+Torch и Triton устанавливаются в нём производителем. Остальные Python-зависимости
+зафиксированы в `requirements/amd-wsl.lock`. Для обновления:
+
+```powershell
+uv pip compile --python-version 3.12 --python-platform x86_64-unknown-linux-gnu --excludes requirements/amd-wsl-provided.txt requirements/amd-wsl.in -o requirements/amd-wsl.lock
+```
+
+Документация: [AMD ROCm / WSL](https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/docs/install/installryz/wsl/howto_wsl.html),
+[ROCDXG](https://github.com/ROCm/librocdxg).
 
 ## Запуск на CPU
 
 Нужен Docker с Compose v2 и доступ в интернет для первой загрузки зависимостей и модели.
-Зависимости в образах устанавливаются через uv из общего `uv.lock`.
+CPU- и Linux AMD-образы устанавливают зависимости через uv из общего `uv.lock`.
+WSL-образ использует отдельный lock-файл, описанный выше.
 
 ```powershell
 Copy-Item .env.example .env
@@ -103,7 +106,7 @@ just smoke               # проверить запущенный сервис 
 ## Зависимости и uv
 
 Используется Python 3.12, версия указана в `.python-version`.
-Все зависимости объявлены в `pyproject.toml`, а их точные версии и источники
+Зависимости CPU, API и native Linux AMD объявлены в `pyproject.toml`, а их версии и источники
 зафиксированы в `uv.lock`. Оба файла входят в репозиторий.
 
 | Набор | Назначение | Установка |
@@ -256,7 +259,7 @@ docker compose logs -f celery-amd
 ```
 
 Compose подставляет `INFERENCE_DEVICE` в `COMPOSE_PROFILES` и запускает только один
-из `celery-cpu` / `celery-amd`. Не включайте оба профиля и не масштабируйте воркер
+из `celery-cpu` / `celery-amd` / `celery-amd-wsl`. Включайте один профиль и не масштабируйте воркер
 в первой версии. Группы `AMD_VIDEO_GID` и `AMD_RENDER_GID` должны соответствовать хосту.
 По умолчанию используется PyTorch 2.8.0 / ROCm 6.4; другие версии потребуют согласовать
 образ, PyTorch и драйвер с конкретным железом. Версии и URL индексов задаются в
