@@ -15,12 +15,12 @@ from common.jobs import JobStore
 
 
 @pytest.fixture
-def settings():
+def settings(request):
     return Settings(
         _env_file=None,
-        sync_timeout_seconds=0.04,
         poll_interval_seconds=0.005,
         max_input_tokens=6,
+        **getattr(request, "param", {}),
     )
 
 

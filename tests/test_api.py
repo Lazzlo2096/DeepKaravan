@@ -1,3 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
+from time import sleep
 from uuid import UUID, uuid4
 
 import pytest
@@ -39,8 +42,42 @@ def test_sync_returns_result_when_ready(client, publisher, store):
     assert response.json()["data"] == [{"index": 0, "dense": [0.1, 0.2]}]
 
 
-def test_sync_timeout_keeps_task_and_can_poll_result(client, publisher, store):
-    response = client.post("/v1/embeddings", json={"texts": ["text"]})
+@pytest.mark.parametrize("settings", [{"sync_timeout_seconds": 0.01}], indirect=True)
+@pytest.mark.parametrize("failed", [False, True])
+def test_sync_waits_through_queue_and_inference_without_timeout(client, publisher, store, failed):
+    # A legacy timeout setting must not make the API return a task_id early.
+    published = Event()
+    publisher.callback = lambda task_id, payload: published.set()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        response_future = executor.submit(client.post, "/v1/embeddings", json={"texts": ["text"]})
+        assert published.wait(timeout=5)
+        task_id = publisher.sent[0]["task_id"]
+        try:
+            sleep(0.05)
+            assert not response_future.done(), "Request returned while the task was queued"
+            store.start(task_id)
+            sleep(0.05)
+            assert not response_future.done(), "Request returned while inference was running"
+            assert client.get("/health/live").status_code == 200
+        finally:
+            if failed:
+                store.finish(
+                    task_id, error=TaskError(code="inference_failed", message="test failure")
+                )
+            else:
+                complete(store, task_id, publisher.sent[0]["args"][0])
+        response = response_future.result(timeout=5)
+    assert response.status_code == (422 if failed else 200)
+    assert "location" not in response.headers
+    assert "retry-after" not in response.headers
+    if failed:
+        assert response.json()["detail"]["error"]["code"] == "inference_failed"
+    else:
+        assert response.json()["data"] == [{"index": 0, "dense": [0.1, 0.2]}]
+
+
+def test_async_task_can_still_be_polled_until_complete(client, publisher, store):
+    response = client.post("/v1/embeddings/async", json={"texts": ["text"]})
     assert response.status_code == 202
     body = response.json()
     assert client.get(body["status_url"]).json()["status"] == "queued"
@@ -134,4 +171,6 @@ def test_health_and_openapi(client):
     assert client.get("/health/live").status_code == 200
     assert client.get("/health/ready").status_code == 200
     schema = client.get("/openapi.json").json()
-    assert "202" in schema["paths"]["/v1/embeddings"]["post"]["responses"]
+    assert "202" not in schema["paths"]["/v1/embeddings"]["post"]["responses"]
+    assert "202" in schema["paths"]["/v1/embeddings/async"]["post"]["responses"]
+    assert "202" in schema["paths"]["/v1/tasks/{task_id}/result"]["get"]["responses"]

@@ -1,4 +1,4 @@
-"""Exercise timeout, persistence and crash recovery on a disposable CPU Compose stack.
+"""Exercise queue persistence and crash recovery on a disposable CPU Compose stack.
 
 This check stops the CPU worker and restarts Redis. Use it without other clients.
 Run the regular smoke test first so the model is already downloaded.
@@ -24,7 +24,6 @@ def compose(*args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default="http://localhost:8000")
-    parser.add_argument("--sync-timeout", type=float, default=60)
     args = parser.parse_args()
     base = args.base_url.rstrip("/")
     payload = {"texts": ["Recovery check"], "embedding_types": ["dense"]}
@@ -42,12 +41,8 @@ def main():
         compose("stop", "--timeout", "10", "celery-cpu")
         code, first = request(base, "/v1/embeddings/async", payload)
         assert code == 202, (code, first)
-        started = time.monotonic()
-        code, second = request(base, "/v1/embeddings", payload)
-        elapsed = time.monotonic() - started
+        code, second = request(base, "/v1/embeddings/async", payload)
         assert code == 202, (code, second)
-        assert args.sync_timeout - 1 <= elapsed <= args.sync_timeout + 10, elapsed
-        print(f"PASS synchronous timeout after {elapsed:.2f}s; task remains queued", flush=True)
 
         compose("restart", "redis")
         for task in (first, second):

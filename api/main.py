@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from time import monotonic
 from uuid import UUID
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
@@ -122,27 +121,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         "/v1/embeddings",
         response_model=EmbeddingResult,
         response_model_exclude_none=True,
-        responses={202: {"model": TaskAccepted}},
         tags=["embeddings"],
     )
-    async def embed_sync(payload: EmbeddingRequest, request: Request, response: Response):
-        # The deadline includes validation, publication and time spent in the queue.
-        deadline = monotonic() + settings.sync_timeout_seconds
+    async def embed_sync(payload: EmbeddingRequest, request: Request):
         task = await submit(request, payload)
         while True:
             task = await get_status(request, task.task_id)
             if task.status in {TaskState.SUCCEEDED, TaskState.FAILED}:
                 return await completed_result(request, task)
-            remaining = deadline - monotonic()
-            if remaining <= 0:
-                pending = accepted(task, response)
-                # A Response bypasses the 200 response-model validation on the 202 path.
-                return JSONResponse(
-                    status_code=202,
-                    content=pending.model_dump(mode="json"),
-                    headers=dict(response.headers),
-                )
-            await asyncio.sleep(min(settings.poll_interval_seconds, remaining))
+            await asyncio.sleep(settings.poll_interval_seconds)
 
     @app.get("/v1/tasks/{task_id}", response_model=TaskStatus, tags=["tasks"])
     async def task_status(task_id: UUID, request: Request):

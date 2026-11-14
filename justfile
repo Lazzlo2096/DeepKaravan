@@ -93,5 +93,5 @@ smoke base_url="http://localhost:8000" timeout="600":
     uv run --locked --extra api python scripts/smoke.py --base-url "{{ base_url }}" --timeout "{{ timeout }}"
 
 # Check CPU recovery: stops the worker and restarts Redis; run without client traffic.
-recovery base_url="http://localhost:8000" sync_timeout="60":
-    uv run --locked --extra api python scripts/check_recovery.py --base-url "{{ base_url }}" --sync-timeout "{{ sync_timeout }}"
+recovery base_url="http://localhost:8000":
+    uv run --locked --extra api python scripts/check_recovery.py --base-url "{{ base_url }}"

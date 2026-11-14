@@ -7,13 +7,13 @@ import urllib.error
 import urllib.request
 
 
-def request(base_url, path, payload=None):
+def request(base_url, path, payload=None, *, timeout=90):
     data = json.dumps(payload, ensure_ascii=False).encode() if payload is not None else None
     req = urllib.request.Request(
         base_url + path, data=data, headers={"Content-Type": "application/json"}
     )
     try:
-        with urllib.request.urlopen(req, timeout=90) as response:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
             return response.status, json.load(response)
     except urllib.error.HTTPError as error:
         return error.code, json.load(error)
@@ -57,16 +57,16 @@ def main():
     print("PASS async inference: dense + sparse + ColBERT, two texts, original order")
 
     code, result = request(
-        base, "/v1/embeddings", {"texts": ["Проверка"], "embedding_types": ["dense"]}
+        base,
+        "/v1/embeddings",
+        {"texts": ["Проверка"], "embedding_types": ["dense"]},
+        timeout=args.timeout,
     )
-    if code == 202:
-        result = wait_result(base, result["result_url"], args.timeout)
-    else:
-        assert code == 200, (code, result)
+    assert code == 200, (code, result)
     assert set(result["data"][0]) == {"index", "dense"}
     print("PASS synchronous inference and selection of embedding types")
 
-    code, result = request(base, "/v1/embeddings", {"texts": []})
+    code, result = request(base, "/v1/embeddings", {"texts": []}, timeout=args.timeout)
     assert code == 200 and result["data"] == [], (code, result)
     print("PASS empty batch")
 

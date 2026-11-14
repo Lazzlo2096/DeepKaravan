@@ -12,7 +12,6 @@ class Settings(BaseSettings):
     redis_results_url: str = "redis://localhost:6379/1"
     task_queue: str = "embeddings"
     result_ttl_seconds: int = Field(default=86400, ge=1)
-    sync_timeout_seconds: float = Field(default=60, gt=0)
     poll_interval_seconds: float = Field(default=0.25, gt=0)
     redis_socket_timeout_seconds: float = Field(default=5, gt=0)
     # Must exceed the longest expected inference. Abrupt recovery can take this long.
