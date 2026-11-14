@@ -4,6 +4,46 @@
 FlagEmbedding, Celery и Redis. Все HTTP-запросы используют одну FIFO-очередь.
 Один Celery-воркер с `solo`-пулом загружает одну модель и выполняет задачи последовательно.
 
+## Этот компьютер: Windows + Radeon 880M
+
+Для Ryzen AI 9 465 / Radeon 880M GPU-воркер запускается непосредственно в Windows
+с PyTorch 2.9.1 / ROCm 7.2.1. Redis и API работают в Docker Desktop.
+Linux-профиль `amd` с `/dev/kfd` для такого запуска не используется.
+Нужны `uv`, `just`, Docker Desktop и совместимый драйвер AMD.
+
+В `.env`:
+
+```dotenv
+INFERENCE_DEVICE=amd
+COMPOSE_PROFILES=windows-amd
+USE_FP16=true
+INFERENCE_BATCH_SIZE=1
+```
+
+```powershell
+just up        # установить GPU-зависимости, проверить GPU, запустить всё
+just ps        # контейнеры и отдельный Windows GPU-воркер
+just logs-gpu  # загрузка модели и выполнение задач
+just logs api  # логи API
+just down      # остановить воркер и контейнеры, сохранив данные
+```
+
+При первом запуске создаётся отдельная `.venv-amd`, устанавливаются пакеты из
+`requirements/windows-amd.lock` и скачивается модель. Исходный список зависимостей —
+`requirements/windows-amd.txt`; для обновления lock-файла используйте
+`uv pip compile --python .venv-amd/Scripts/python.exe requirements/windows-amd.txt -o requirements/windows-amd.lock`.
+Кэш Windows-воркера хранится
+в `.cache/huggingface`, логи — в `.cache/windows-amd`. `just up` проверяет реальное
+вычисление на GPU; при недоступности GPU запуск завершается ошибкой.
+Повторный `just up` не создаёт второй воркер. Для перезапуска GPU-воркера
+используйте `just down`, затем `just up`; `just restart api` перезапускает только API.
+Redis опубликован только на `127.0.0.1:6379` для подключения Windows-воркера.
+Используйте `just up/down`, чтобы применялся `compose.windows-amd.yaml`.
+
+Матрица совместимости и инструкция AMD:
+[Ryzen / Windows](https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/docs/compatibility/compatibilityryz/windows/windows_compatibility.html),
+[PyTorch / Windows](https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/docs/install/installryz/windows/install-pytorch.html).
+
 ## Запуск на CPU
 
 Нужен Docker с Compose v2 и доступ в интернет для первой загрузки зависимостей и модели.

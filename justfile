@@ -36,20 +36,40 @@ build: init
     docker compose build
 
 # Build and start Redis, API and the worker selected in .env.
+[unix]
 up: init
     docker compose up -d --build
 
+[windows]
+up: init
+    @if (Select-String -Path .env -Pattern '^COMPOSE_PROFILES=windows-amd\s*$' -Quiet) { & ./scripts/windows-amd.ps1 up } else { docker compose up -d --build; exit $LASTEXITCODE }
+
 # Stop and remove containers, preserving Redis data and the model cache.
+[unix]
 down:
     docker compose down
+
+[windows]
+down:
+    @if (Select-String -Path .env -Pattern '^COMPOSE_PROFILES=windows-amd\s*$' -Quiet) { & ./scripts/windows-amd.ps1 down } else { docker compose down; exit $LASTEXITCODE }
 
 # Restart all services or specified services, e.g. just restart api.
 restart *services:
     docker compose restart {{ services }}
 
 # Show service status.
+[unix]
 ps:
     docker compose ps
+
+[windows]
+ps:
+    @if (Select-String -Path .env -Pattern '^COMPOSE_PROFILES=windows-amd\s*$' -Quiet) { & ./scripts/windows-amd.ps1 ps } else { docker compose ps; exit $LASTEXITCODE }
+
+# Follow native Windows AMD GPU worker logs.
+[windows]
+logs-gpu:
+    @& ./scripts/windows-amd.ps1 logs
 
 # Follow logs, optionally for specific services, e.g. just logs api celery-cpu.
 logs *services:
