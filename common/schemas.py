@@ -15,9 +15,9 @@ class EmbeddingType(StrEnum):
 class EmbeddingRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    texts: Annotated[list[StrictStr], Field(max_length=1024)]
+    input: Annotated[list[StrictStr], Field(max_length=1024)]
     embedding_types: Annotated[list[EmbeddingType], Field(min_length=1, max_length=3)] = Field(
-        default_factory=lambda: list(EmbeddingType)
+        default_factory=lambda: [EmbeddingType.DENSE]
     )
 
     @field_validator("embedding_types")

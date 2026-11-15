@@ -34,7 +34,7 @@ def test_worker_persists_result_before_completion(store, configured_worker):
     configured_worker.encode.return_value = EmbeddingResult(
         task_id=task_id, model="BAAI/bge-m3", embedding_types=["dense"], data=[]
     )
-    run_task(task_id, {"texts": [], "embedding_types": ["dense"]})
+    run_task(task_id, {"input": [], "embedding_types": ["dense"]})
     assert store.get(task_id).status == "succeeded"
     assert store.get_result(task_id).task_id == task_id
 
@@ -46,7 +46,7 @@ def test_interrupted_running_task_is_executed_again(store, configured_worker):
     configured_worker.encode.return_value = EmbeddingResult(
         task_id=task_id, model="BAAI/bge-m3", embedding_types=["dense"], data=[]
     )
-    run_task(task_id, {"texts": []})
+    run_task(task_id, {"input": []})
     configured_worker.encode.assert_called_once()
     assert store.get(task_id).status == "succeeded"
 
@@ -57,9 +57,9 @@ def test_ack_redelivery_does_not_recompute_or_extend_ttl(store, configured_worke
     configured_worker.encode.return_value = EmbeddingResult(
         task_id=task_id, model="BAAI/bge-m3", embedding_types=["dense"], data=[]
     )
-    run_task(task_id, {"texts": []})
+    run_task(task_id, {"input": []})
     expiry = store.get(task_id).expires_at
-    run_task(task_id, {"texts": []})
+    run_task(task_id, {"input": []})
     configured_worker.encode.assert_called_once()
     assert store.get(task_id).expires_at == expiry
 
@@ -68,7 +68,7 @@ def test_inference_exception_is_terminal_failure(store, configured_worker):
     task_id = uuid4()
     store.create(task_id)
     configured_worker.encode.side_effect = RuntimeError("sensitive internal details")
-    run_task(task_id, {"texts": ["text"]})
+    run_task(task_id, {"input": ["text"]})
     task = store.get(task_id)
     assert task.status == "failed"
     assert "RuntimeError" in task.error.message
@@ -87,7 +87,7 @@ def test_storage_failure_requeues_without_ack(store, configured_worker, monkeypa
 
     monkeypatch.setattr(store, "finish", unavailable)
     with pytest.raises(Reject) as error:
-        run_task(task_id, {"texts": []})
+        run_task(task_id, {"input": []})
     assert error.value.requeue is True
     assert store.get(task_id).status == "running"
 
@@ -105,7 +105,7 @@ def test_model_flags_and_output_serialization(selected, settings, tokenizer, eng
         "lexical_weights": [{"3": np.float32(0.5)}],
         "colbert_vecs": [np.array([[0.3, 0.4]])],
     }
-    request = EmbeddingRequest(texts=["text"], embedding_types=selected)
+    request = EmbeddingRequest(input=["text"], embedding_types=selected)
     result = inference.encode(str(uuid4()), request)
     flags = engine.encode.call_args.kwargs
     assert flags["max_length"] == settings.max_input_tokens
@@ -121,7 +121,7 @@ def test_empty_batch_skips_model(settings, tokenizer, engine):
     inference.settings = settings
     inference.validator = TextValidator(tokenizer, settings)
     inference.model = engine
-    assert inference.encode(str(uuid4()), EmbeddingRequest(texts=[])).data == []
+    assert inference.encode(str(uuid4()), EmbeddingRequest(input=[])).data == []
     engine.encode.assert_not_called()
 
 

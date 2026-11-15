@@ -62,19 +62,19 @@ class InferenceEngine:
         logger.info("BGE-M3 is ready")
 
     def encode(self, task_id: str, request: EmbeddingRequest) -> EmbeddingResult:
-        self.validator.validate(request.texts)
+        self.validator.validate(request.input)
         selected = set(request.embedding_types)
         data = []
-        if request.texts:
+        if request.input:
             output = self.model.encode(
-                request.texts,
+                request.input,
                 batch_size=self.settings.inference_batch_size,
                 max_length=self.settings.max_input_tokens,
                 return_dense=EmbeddingType.DENSE in selected,
                 return_sparse=EmbeddingType.SPARSE in selected,
                 return_colbert_vecs=EmbeddingType.COLBERT in selected,
             )
-            for index in range(len(request.texts)):
+            for index in range(len(request.input)):
                 item = TextEmbedding(index=index)
                 if EmbeddingType.DENSE in selected:
                     item.dense = output["dense_vecs"][index].tolist()

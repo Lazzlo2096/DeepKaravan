@@ -59,7 +59,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     async def submit(request: Request, payload: EmbeddingRequest) -> TaskStatus:
         try:
-            await run_in_threadpool(request.app.state.validator.validate, payload.texts)
+            await run_in_threadpool(request.app.state.validator.validate, payload.input)
         except InputTooLong as exc:
             raise HTTPException(
                 status_code=422,

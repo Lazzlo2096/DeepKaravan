@@ -26,7 +26,7 @@ def main():
     parser.add_argument("--base-url", default="http://localhost:8000")
     args = parser.parse_args()
     base = args.base_url.rstrip("/")
-    payload = {"texts": ["Recovery check"], "embedding_types": ["dense"]}
+    payload = {"input": ["Recovery check"], "embedding_types": ["dense"]}
     existing = subprocess.run(
         ["docker", "container", "inspect", RECOVERY_CONTAINER],
         cwd=ROOT,
@@ -77,7 +77,7 @@ def main():
         code, interrupted = request(
             base,
             "/v1/embeddings/async",
-            {"texts": ["recovery " * 256] * 32, "embedding_types": ["dense"]},
+            {"input": ["recovery " * 256] * 32, "embedding_types": ["dense"]},
         )
         assert code == 202
         deadline = time.monotonic() + 30

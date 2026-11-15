@@ -42,7 +42,10 @@ def main():
     code, accepted = request(
         base,
         "/v1/embeddings/async",
-        {"texts": ["Привет, мир", "Search across documents"]},
+        {
+            "input": ["Привет, мир", "Search across documents"],
+            "embedding_types": ["dense", "sparse", "colbert"],
+        },
     )
     assert code == 202, (code, accepted)
     result = wait_result(base, accepted["result_url"], args.timeout)
@@ -59,18 +62,18 @@ def main():
     code, result = request(
         base,
         "/v1/embeddings",
-        {"texts": ["Проверка"], "embedding_types": ["dense"]},
+        {"input": ["Проверка"]},
         timeout=args.timeout,
     )
     assert code == 200, (code, result)
     assert set(result["data"][0]) == {"index", "dense"}
     print("PASS synchronous inference and selection of embedding types")
 
-    code, result = request(base, "/v1/embeddings", {"texts": []}, timeout=args.timeout)
+    code, result = request(base, "/v1/embeddings", {"input": []}, timeout=args.timeout)
     assert code == 200 and result["data"] == [], (code, result)
     print("PASS empty batch")
 
-    code, error = request(base, "/v1/embeddings/async", {"texts": ["hello " * 9000]})
+    code, error = request(base, "/v1/embeddings/async", {"input": ["hello " * 9000]})
     assert code == 422 and error["detail"]["code"] == "text_too_long", (code, error)
     print("PASS long text rejected before enqueue")
 

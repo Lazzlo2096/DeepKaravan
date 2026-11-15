@@ -18,27 +18,33 @@ def complete(store, task_id, payload):
             task_id=UUID(task_id),
             model="BAAI/bge-m3",
             embedding_types=payload["embedding_types"],
-            data=[TextEmbedding(index=i, dense=[0.1, 0.2]) for i in range(len(payload["texts"]))],
+            data=[TextEmbedding(index=i, dense=[0.1, 0.2]) for i in range(len(payload["input"]))],
         ),
     )
 
 
 def test_async_accepts_and_uses_shared_queue(client, publisher, store):
-    response = client.post("/v1/embeddings/async", json={"texts": ["text"]})
+    response = client.post("/v1/embeddings/async", json={"input": ["text"]})
     assert response.status_code == 202
     body = response.json()
     assert body["status"] == "queued"
     assert response.headers["location"] == body["status_url"]
     assert response.headers["retry-after"] == "1"
     assert store.get(body["task_id"]).status == "queued"
-    assert publisher.sent[0]["args"][0]["embedding_types"] == ["dense", "sparse", "colbert"]
+    assert publisher.sent[0]["args"][0]["embedding_types"] == ["dense"]
     assert client.get(body["result_url"]).status_code == 202
 
 
-def test_sync_returns_result_when_ready(client, publisher, store):
+@pytest.mark.parametrize("embedding_types", [None, ["dense"]])
+def test_sync_returns_result_when_ready(client, publisher, store, embedding_types):
     publisher.callback = lambda task_id, payload: complete(store, task_id, payload)
-    response = client.post("/v1/embeddings", json={"texts": ["text"], "embedding_types": ["dense"]})
+    payload = {"input": ["text"]}
+    if embedding_types is not None:
+        payload["embedding_types"] = embedding_types
+    response = client.post("/v1/embeddings", json=payload)
     assert response.status_code == 200
+    assert response.json()["embedding_types"] == ["dense"]
+    assert publisher.sent[0]["args"][0] == {"input": ["text"], "embedding_types": ["dense"]}
     assert response.json()["data"] == [{"index": 0, "dense": [0.1, 0.2]}]
 
 
@@ -49,7 +55,7 @@ def test_sync_waits_through_queue_and_inference_without_timeout(client, publishe
     published = Event()
     publisher.callback = lambda task_id, payload: published.set()
     with ThreadPoolExecutor(max_workers=1) as executor:
-        response_future = executor.submit(client.post, "/v1/embeddings", json={"texts": ["text"]})
+        response_future = executor.submit(client.post, "/v1/embeddings", json={"input": ["text"]})
         assert published.wait(timeout=5)
         task_id = publisher.sent[0]["task_id"]
         try:
@@ -77,7 +83,7 @@ def test_sync_waits_through_queue_and_inference_without_timeout(client, publishe
 
 
 def test_async_task_can_still_be_polled_until_complete(client, publisher, store):
-    response = client.post("/v1/embeddings/async", json={"texts": ["text"]})
+    response = client.post("/v1/embeddings/async", json={"input": ["text"]})
     assert response.status_code == 202
     body = response.json()
     assert client.get(body["status_url"]).json()["status"] == "queued"
@@ -90,7 +96,7 @@ def test_async_task_can_still_be_polled_until_complete(client, publisher, store)
 
 @pytest.mark.parametrize("path", ["/v1/embeddings", "/v1/embeddings/async"])
 def test_long_text_rejected_before_enqueue(client, publisher, path):
-    response = client.post(path, json={"texts": ["text", "text text text text text"]})
+    response = client.post(path, json={"input": ["text", "text text text text text"]})
     assert response.status_code == 422
     assert response.json()["detail"] == {
         "code": "text_too_long",
@@ -101,31 +107,36 @@ def test_long_text_rejected_before_enqueue(client, publisher, path):
 
 
 def test_exact_token_limit_allowed(client):
-    response = client.post("/v1/embeddings/async", json={"texts": ["text text text text"]})
+    response = client.post("/v1/embeddings/async", json={"input": ["text text text text"]})
     assert response.status_code == 202
 
 
 @pytest.mark.parametrize(
     "payload",
     [
-        {"texts": "text"},
-        {"texts": [5]},
-        {"texts": [None]},
-        {"texts": ["text"], "embedding_types": []},
-        {"texts": ["text"], "embedding_types": ["dense", "dense"]},
-        {"texts": ["text"], "embedding_types": ["unknown"]},
-        {"texts": ["text"] * 1025},
-        {"texts": ["text"], "unexpected": True},
+        {},
+        {"texts": ["text"]},
+        {"input": ["text"], "texts": ["text"]},
+        {"input": "text"},
+        {"input": [5]},
+        {"input": [None]},
+        {"input": ["text"], "embedding_types": []},
+        {"input": ["text"], "embedding_types": None},
+        {"input": ["text"], "embedding_types": ["dense", "dense"]},
+        {"input": ["text"], "embedding_types": ["unknown"]},
+        {"input": ["text"] * 1025},
+        {"input": ["text"], "unexpected": True},
     ],
 )
-def test_invalid_request_rejected(client, publisher, payload):
-    assert client.post("/v1/embeddings/async", json=payload).status_code == 422
+@pytest.mark.parametrize("path", ["/v1/embeddings", "/v1/embeddings/async"])
+def test_invalid_request_rejected(client, publisher, payload, path):
+    assert client.post(path, json=payload).status_code == 422
     assert publisher.sent == []
 
 
 def test_empty_batch_accepted(client, publisher, store):
     publisher.callback = lambda task_id, payload: complete(store, task_id, payload)
-    response = client.post("/v1/embeddings", json={"texts": []})
+    response = client.post("/v1/embeddings", json={"input": []})
     assert response.status_code == 200
     assert response.json()["data"] == []
 
@@ -144,7 +155,7 @@ def test_failed_task_has_status_and_error(client, store, publisher):
         store.finish(task_id, error=TaskError(code="inference_failed", message="test failure"))
 
     publisher.callback = fail
-    response = client.post("/v1/embeddings", json={"texts": ["text"]})
+    response = client.post("/v1/embeddings", json={"input": ["text"]})
     assert response.status_code == 422
     task_id = response.json()["detail"]["task_id"]
     assert client.get(f"/v1/tasks/{task_id}").json()["status"] == "failed"
@@ -156,7 +167,7 @@ def test_broker_outage_returns_503(client, publisher):
         raise OperationalError("broker is offline")
 
     publisher.callback = fail
-    assert client.post("/v1/embeddings/async", json={"texts": []}).status_code == 503
+    assert client.post("/v1/embeddings/async", json={"input": []}).status_code == 503
 
 
 def test_redis_outage_returns_503(client, monkeypatch):
@@ -171,6 +182,9 @@ def test_health_and_openapi(client):
     assert client.get("/health/live").status_code == 200
     assert client.get("/health/ready").status_code == 200
     schema = client.get("/openapi.json").json()
+    request_schema = schema["components"]["schemas"]["EmbeddingRequest"]
+    assert request_schema["required"] == ["input"]
+    assert "texts" not in request_schema["properties"]
     assert "202" not in schema["paths"]["/v1/embeddings"]["post"]["responses"]
     assert "202" in schema["paths"]["/v1/embeddings/async"]["post"]["responses"]
     assert "202" in schema["paths"]["/v1/tasks/{task_id}/result"]["get"]["responses"]

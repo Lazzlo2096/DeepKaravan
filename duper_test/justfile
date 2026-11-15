@@ -1,0 +1,35 @@
+# Run the REST client from the repository root. The server reads its own .env.
+set working-directory := ".."
+
+[windows]
+set shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
+
+[unix]
+set shell := ["sh", "-eu", "-c"]
+
+python := env("DUPER_TEST_PYTHON", if os() == "windows" { ".venv/Scripts/python.exe" } else { ".venv/bin/python" })
+
+# List commands without starting the benchmark.
+default:
+    @just --justfile "{{ justfile() }}" --list
+
+# REST benchmark: just run --repeats 5 --warmups 2 --batch-sizes "1 2".
+[windows]
+run *args:
+    & "{{ python }}" duper_test/batch_embeddings.py {{ args }}
+
+[unix]
+run *args:
+    "{{ python }}" duper_test/batch_embeddings.py {{ args }}
+
+# Short benchmark: batches 1 and 128, three measurements, one warmup.
+quick: (run "--repeats" "3" "--warmups" "1" "--batch-sizes" "1" "128")
+
+# Show REST client options without sending requests.
+[windows]
+options:
+    & "{{ python }}" duper_test/batch_embeddings.py --help
+
+[unix]
+options:
+    "{{ python }}" duper_test/batch_embeddings.py --help

@@ -1,0 +1,40 @@
+# Resolve Compose and .env from the repository root.
+set working-directory := ".."
+
+[windows]
+set shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
+
+[unix]
+set shell := ["sh", "-eu", "-c"]
+
+service := env("PUPER_TEST_SERVICE", "celery-amd-wsl")
+python := env("PUPER_TEST_PYTHON", if os() == "windows" { ".venv/Scripts/python.exe" } else { ".venv/bin/python" })
+
+# List commands without loading the model.
+default:
+    @just --justfile "{{ justfile() }}" --list
+
+# Full benchmark by default; accepts batch_capacity.py arguments.
+run *args:
+    docker compose run --rm --no-deps -v "{{ justfile_directory() }}:/app/puper_test" --entrypoint python {{ service }} /app/puper_test/batch_capacity.py {{ args }}
+
+# Short dense benchmark: 128 tokens, batches 1/2/4/8, one warmup, three repeats.
+quick: (run "--tokens" "128" "--batch-sizes" "1" "2" "4" "8" "--warmups" "1" "--repeats" "3")
+
+# Stop the regular worker to release GPU memory before benchmarking.
+stop-worker:
+    docker compose stop {{ service }}
+
+# Start the regular worker again after benchmarking.
+start-worker:
+    docker compose start {{ service }}
+
+# Show arguments locally without Docker or loading the model.
+[windows]
+options:
+    & "{{ python }}" puper_test/batch_capacity.py --help
+
+# Show arguments locally without Docker or loading the model.
+[unix]
+options:
+    "{{ python }}" puper_test/batch_capacity.py --help
