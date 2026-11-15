@@ -1,10 +1,9 @@
 import logging
-from functools import lru_cache
 from uuid import UUID
 
 from huggingface_hub import snapshot_download
 
-from common.config import Settings, get_settings
+from common.config import Settings
 from common.schemas import (
     EmbeddingRequest,
     EmbeddingResult,
@@ -92,8 +91,3 @@ class InferenceEngine:
             embedding_types=request.embedding_types,
             data=data,
         )
-
-
-@lru_cache(maxsize=1)
-def get_engine() -> InferenceEngine:
-    return InferenceEngine(get_settings())

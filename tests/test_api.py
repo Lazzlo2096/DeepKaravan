@@ -4,9 +4,8 @@ from time import sleep
 from uuid import UUID, uuid4
 
 import pytest
-from kombu.exceptions import OperationalError
-from redis.exceptions import ConnectionError
 
+from api.service import QueueUnavailable
 from common.schemas import EmbeddingResult, TaskError, TextEmbedding
 
 
@@ -216,25 +215,27 @@ def test_failed_task_has_status_and_error(client, store, publisher):
     assert client.get(f"/api/v1/tasks/{task_id}/result").status_code == 422
 
 
-def test_broker_outage_returns_503(client, publisher):
-    def fail(task_id, payload):
-        raise OperationalError("broker is offline")
-
-    publisher.callback = fail
+def test_queue_unavailable_returns_503(client, publisher):
+    publisher.ready = False
     assert (
         client.post(
             "/api/v1/embeddings/async", json={"model": "baai/bge-m3", "input": []}
         ).status_code
         == 503
     )
+    assert client.get("/health/ready").status_code == 503
+    assert client.get("/health/live").status_code == 200
 
 
-def test_redis_outage_returns_503(client, monkeypatch):
-    def fail(*args, **kwargs):
-        raise ConnectionError("Redis is offline")
+def test_queue_full_returns_503(client, monkeypatch):
+    def fail(request):
+        raise QueueUnavailable("Inference queue is full")
 
-    monkeypatch.setattr(client.app.state.service.store.redis, "get", fail)
-    assert client.get(f"/api/v1/tasks/{uuid4()}").status_code == 503
+    monkeypatch.setattr(client.app.state.service, "submit", fail)
+    assert (
+        client.post("/api/v1/embeddings", json={"model": "baai/bge-m3", "input": []}).status_code
+        == 503
+    )
 
 
 def test_health_and_openapi(client):

@@ -1,11 +1,9 @@
 [project]
 name = "deepkaravan"
 version = "0.1.0"
-description = "BGE-M3 inference service with FastAPI, Celery and Redis"
+description = "BGE-M3 inference service with FastAPI and a dedicated inference process"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "celery[redis]==5.7.0",
-    "redis==6.4.0",
     "pydantic==2.14.3",
     "pydantic-settings==2.16.3",
     "huggingface-hub==0.36.0",
@@ -31,7 +29,6 @@ amd = [
 dev = [
     "pytest==9.2.0",
     "httpx==0.28.1",
-    "fakeredis[lua]==2.40.0",
     "ruff==0.17.5",
     "numpy==2.4.6",
 ]
@@ -67,10 +64,7 @@ explicit = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = [".", "celery"]
-markers = [
-    "integration: requires a real Redis server (TEST_REDIS_URL)",
-]
+pythonpath = ["."]
 
 [tool.ruff]
 target-version = "py312"
@@ -80,5 +74,4 @@ line-length = 100
 select = ["E", "F", "I", "UP", "B", "ASYNC"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["api", "common", "worker"]
-known-third-party = ["celery", "redis"]
+known-first-party = ["api", "common", "gpu_worker"]

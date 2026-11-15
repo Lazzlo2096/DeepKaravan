@@ -1,7 +1,7 @@
 # Подбор внутреннего батча BGE-M3
 
 `batch_capacity.py` загружает модель проекта **один раз** и напрямую вызывает
-`model.encode` с разными `batch_size`. API, Redis и Celery не участвуют.
+`model.encode` с разными `batch_size`. API и межпроцессные очереди не участвуют.
 `INFERENCE_BATCH_SIZE` из `.env` не ограничивает перебор: размер передаётся явно.
 Типы эмбеддингов одинаковы для всей серии и задаются через `--types`.
 
@@ -25,7 +25,7 @@ just start-worker            # вернуть штатный воркер пос
 запросов. Результаты сохраняются в `puper_test/results/`.
 
 Из корня проекта: `just --justfile puper_test/justfile quick`.
-По умолчанию используется сервис `celery-amd-wsl`; другой можно задать через
+По умолчанию используется сервис `api`; другой можно задать через
 `PUPER_TEST_SERVICE`. Для локальной справки Python можно переопределить
 через `PUPER_TEST_PYTHON`. Docker-образ должен быть уже собран.
 
@@ -33,24 +33,25 @@ just start-worker            # вернуть штатный воркер пос
 
 Запускать из корня проекта. Остановите основной воркер на время замера, чтобы
 его модель не занимала память GPU и не конкурировала за вычисления. Входящие
-API-задания в это время будут ждать в очереди. Дождитесь завершения текущих
+API во время замера будет недоступен; его очередь и результаты теряются при остановке.
+Дождитесь завершения текущих
 запросов перед остановкой. Сам скрипт не останавливает сервисы и не меняет `.env`.
 
 PowerShell, короткая серия:
 
 ```powershell
-docker compose stop celery-amd-wsl
+docker compose stop api
 try {
-    docker compose run --rm --no-deps -v "${PWD}/puper_test:/app/puper_test" --entrypoint python celery-amd-wsl /app/puper_test/batch_capacity.py --tokens 128 --batch-sizes 1 2 4 8 --warmups 1 --repeats 3
+    docker compose run --rm --no-deps -v "${PWD}/puper_test:/app/puper_test" --entrypoint python api /app/puper_test/batch_capacity.py --tokens 128 --batch-sizes 1 2 4 8 --warmups 1 --repeats 3
 } finally {
-    docker compose start celery-amd-wsl
+    docker compose start api
 }
 ```
 
 Вместо короткой команды внутри `try` для полной серии:
 
 ```powershell
-docker compose run --rm --no-deps -v "${PWD}/puper_test:/app/puper_test" --entrypoint python celery-amd-wsl /app/puper_test/batch_capacity.py --tokens 32 128 512 2048 8192 --batch-sizes 1 2 4 8 16 32 --types dense --warmups 2 --repeats 5
+docker compose run --rm --no-deps -v "${PWD}/puper_test:/app/puper_test" --entrypoint python api /app/puper_test/batch_capacity.py --tokens 32 128 512 2048 8192 --batch-sizes 1 2 4 8 16 32 --types dense --warmups 2 --repeats 5
 ```
 
 Для dense + sparse замените `--types dense` на `--types dense sparse`.
@@ -60,8 +61,8 @@ docker compose run --rm --no-deps -v "${PWD}/puper_test:/app/puper_test" --entry
 
 Контейнер использует ту же модель, ревизию и FP16, что и штатный воркер.
 Образ должен быть уже собран. Пересборка ради теста не нужна: папка монтируется.
-Запускается отдельный процесс модели, а не второй Celery-воркер.
-Для CPU / native AMD замените имя сервиса на `celery-cpu` / `celery-amd` при
+Запускается отдельный процесс модели, а не второй GPU process-воркер.
+Для CPU / native AMD замените имя сервиса на `api` / `api` при
 соответствующем окружении. Справка без загрузки модели:
 
 ```powershell

@@ -1,50 +1,19 @@
 name: deepkaravan
 
-x-worker: &worker
-  env_file: .env
-  environment:
-    REDIS_BROKER_URL: redis://redis:6379/0
-    REDIS_RESULTS_URL: redis://redis:6379/1
-  restart: unless-stopped
-  init: true
-  stop_grace_period: 120s
-  depends_on:
-    redis:
-      condition: service_healthy
-  volumes:
-    - model-cache:/cache/huggingface
-
 services:
-  redis:
-    image: redis:7.4-alpine
-    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
-    volumes:
-      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
-      - redis-data:/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-    stop_grace_period: 30s
-
   api:
     build:
       context: .
-      dockerfile: api/Dockerfile
+      dockerfile: Dockerfile
+      target: ${INFERENCE_DEVICE:-cpu}
     env_file: .env
-    environment:
-      REDIS_BROKER_URL: redis://redis:6379/0
-      REDIS_RESULTS_URL: redis://redis:6379/1
     ports:
       - "${API_HOST:-127.0.0.1}:${API_PORT:-8000}:8000"
     volumes:
       - model-cache:/cache/huggingface
-    depends_on:
-      redis:
-        condition: service_healthy
     restart: unless-stopped
+    init: true
+    stop_grace_period: 45s
     healthcheck:
       test:
         - CMD
@@ -53,50 +22,8 @@ services:
         - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready', timeout=3)"
       interval: 10s
       timeout: 5s
-      start_period: 120s
+      start_period: 600s
       retries: 3
 
-  celery-cpu:
-    <<: *worker
-    profiles: [cpu]
-    build:
-      context: .
-      dockerfile: celery/Dockerfile
-      target: cpu
-
-  celery-amd:
-    <<: *worker
-    profiles: [amd]
-    build:
-      context: .
-      dockerfile: celery/Dockerfile
-      target: amd
-    devices:
-      - /dev/kfd:/dev/kfd
-      - /dev/dri:/dev/dri
-    group_add:
-      - "${AMD_VIDEO_GID:-44}"
-      - "${AMD_RENDER_GID:-109}"
-    shm_size: 1gb
-
-  celery-amd-wsl:
-    <<: *worker
-    profiles: [amd-wsl]
-    build:
-      context: .
-      dockerfile: celery/Dockerfile.wsl
-    devices:
-      - /dev/dxg:/dev/dxg
-    volumes:
-      - model-cache:/cache/huggingface
-      - type: bind
-        source: /usr/lib/wsl/lib
-        target: /usr/lib/wsl/lib
-        read_only: true
-        bind:
-          create_host_path: false
-    shm_size: 1gb
-
 volumes:
-  redis-data:
   model-cache:

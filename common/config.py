@@ -8,14 +8,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    redis_broker_url: str = "redis://localhost:6379/0"
-    redis_results_url: str = "redis://localhost:6379/1"
-    task_queue: str = "embeddings"
     result_ttl_seconds: int = Field(default=86400, ge=1)
     poll_interval_seconds: float = Field(default=0.01, gt=0)
-    redis_socket_timeout_seconds: float = Field(default=5, gt=0)
-    # Must exceed the longest expected inference. Abrupt recovery can take this long.
-    visibility_timeout_seconds: int = Field(default=3600, ge=1)
+    queue_capacity: int = Field(default=128, ge=1)
+    worker_startup_timeout_seconds: float = Field(default=600, gt=0)
+    worker_shutdown_timeout_seconds: float = Field(default=30, gt=0)
 
     model_id: Literal["BAAI/bge-m3"] = "BAAI/bge-m3"
     model_revision: str = "5617a9f61b028005a4858fdac845db406aefb181"

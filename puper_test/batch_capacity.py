@@ -1,4 +1,4 @@
-"""Opt-in benchmark of real BGE-M3 internal batches; no API, Redis or Celery."""
+"""Opt-in benchmark of real BGE-M3 internal batches; no API or IPC."""
 
 import argparse
 import gc
@@ -15,7 +15,7 @@ from pathlib import Path
 
 # Also support direct execution from the project root without PYTHONPATH setup.
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT), str(ROOT / "celery")]
+sys.path.insert(0, str(ROOT))
 
 
 class ForwardFailure(Exception):
@@ -247,7 +247,7 @@ def main():
     try:
         import torch
 
-        from worker.inference import InferenceEngine
+        from gpu_worker.inference import InferenceEngine
 
         report["torch_version"] = torch.__version__
         report["hip_version"] = torch.version.hip

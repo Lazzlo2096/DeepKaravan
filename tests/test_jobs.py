@@ -1,18 +1,12 @@
-import json
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
+
+import pytest
 
 from common.schemas import EmbeddingResult, TaskError
 
 
-def test_queued_and_running_tasks_have_no_ttl(store, redis):
-    task_id = uuid4()
-    store.create(task_id)
-    assert redis.ttl(store.status_key(task_id)) == -1
-    store.start(task_id)
-    assert redis.ttl(store.status_key(task_id)) == -1
-
-
-def test_completed_result_and_status_expire_together(store, redis, settings):
+def test_completed_result_and_status_expire_together(store):
     task_id = uuid4()
     store.create(task_id)
     store.start(task_id)
@@ -24,30 +18,59 @@ def test_completed_result_and_status_expire_together(store, redis, settings):
     )
     assert final.status == "succeeded"
     assert (final.expires_at - final.finished_at).total_seconds() == 86400
-    assert 86399 <= redis.ttl(store.status_key(task_id)) <= 86400
-    assert redis.ttl(store.result_key(task_id)) == redis.ttl(store.status_key(task_id))
-    redis.delete(store.status_key(task_id), store.result_key(task_id))
-    assert store.get(task_id) is None
+    assert store.get_result(task_id).task_id == task_id
+    store._statuses[str(task_id)].expires_at = datetime.now(UTC) - timedelta(seconds=1)
     assert store.get_result(task_id) is None
+    assert store.get(task_id) is None
 
 
-def test_failed_task_expires_and_does_not_have_result(store, redis):
+def test_pending_tasks_do_not_expire_and_copies_cannot_mutate_store(store):
+    task_id = uuid4()
+    task = store.create(task_id)
+    task.status = "failed"
+    assert store.get(task_id).status == "queued"
+    store.start(task_id)
+    store.prune()
+    assert store.get(task_id).status == "running"
+    assert store.get(task_id).expires_at is None
+
+
+def test_failure_and_duplicate_completion(store):
     task_id = uuid4()
     store.create(task_id)
     final = store.finish(task_id, error=TaskError(code="failed", message="failed"))
-    assert final.status == "failed"
-    assert redis.ttl(store.status_key(task_id)) > 0
     assert store.get_result(task_id) is None
+    assert store.finish(task_id, error=TaskError(code="again", message="again")) == final
+    with pytest.raises(ValueError):
+        store.finish(task_id)
 
 
-def test_legacy_dense_result_is_read_as_embedding(store, redis):
+def test_fail_pending_preserves_completed_results(store):
+    ids = [uuid4() for _ in range(3)]
+    for task_id in ids:
+        store.create(task_id)
+    store.start(ids[1])
+    store.finish(
+        ids[2],
+        result=EmbeddingResult(
+            task_id=ids[2], model="BAAI/bge-m3", embedding_types=["dense"], data=[]
+        ),
+    )
+    store.fail_pending("worker_exited", "worker exited")
+    assert [store.get(task_id).status for task_id in ids] == ["failed", "failed", "succeeded"]
+    assert store.get_result(ids[2]) is not None
+
+
+def test_prune_reclaims_expired_results(store):
     task_id = uuid4()
-    raw = EmbeddingResult(
-        task_id=task_id, model="BAAI/bge-m3", embedding_types=["dense"], data=[]
-    ).model_dump(mode="json")
-    raw["data"] = [{"index": 0, "dense": [0.1, 0.2]}]
-    redis.set(store.result_key(task_id), json.dumps(raw))
-    result = store.get_result(task_id)
-    assert result.model_dump(mode="json", exclude_none=True)["data"] == [
-        {"object": "embedding", "index": 0, "embedding": [0.1, 0.2]}
-    ]
+    store.create(task_id)
+    store.finish(
+        task_id,
+        result=EmbeddingResult(
+            task_id=task_id, model="BAAI/bge-m3", embedding_types=["dense"], data=[]
+        ),
+    )
+    store._statuses[str(task_id)].expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    store.prune()
+    assert not store._statuses
+    assert not store._results

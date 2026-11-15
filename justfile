@@ -1,4 +1,4 @@
-# Docker Compose reads .env itself, including COMPOSE_PROFILES interpolation.
+# Docker Compose reads .env itself, including COMPOSE_FILE and device settings.
 [windows]
 set shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
 
@@ -35,11 +35,11 @@ lock-check:
 build: init
     docker compose build
 
-# Build and start Redis, API and the worker selected in .env.
+# Build and start the API and inference process in one container.
 up: init
     docker compose up -d --build
 
-# Stop and remove containers, preserving Redis data and the model cache.
+# Stop and remove containers, preserving the model cache.
 down:
     docker compose down
 
@@ -53,13 +53,13 @@ ps:
 
 # Follow the AMD GPU worker running in Docker Desktop / WSL.
 logs-gpu:
-    docker compose logs --follow --tail 100 celery-amd-wsl
+    docker compose logs --follow --tail 100 api
 
 # Verify real GPU computation inside the Windows / WSL worker image.
 gpu-check:
-    docker compose run --rm --no-deps celery-amd-wsl python scripts/check_amd.py
+    docker compose run --rm --no-deps api python scripts/check_amd.py
 
-# Follow logs, optionally for specific services, e.g. just logs api celery-cpu.
+# Follow logs, optionally for specific services, e.g. just logs api.
 logs *services:
     docker compose logs --follow --tail 100 {{ services }}
 
@@ -92,6 +92,6 @@ check: lock-check lint format-check test config
 smoke base_url="http://localhost:8000" timeout="600":
     uv run --locked --extra api python scripts/smoke.py --base-url "{{ base_url }}" --timeout "{{ timeout }}"
 
-# Check CPU recovery: stops the worker and restarts Redis; run without client traffic.
+# Check restart semantics: in-memory tasks disappear after container restart.
 recovery base_url="http://localhost:8000":
     uv run --locked --extra api python scripts/check_recovery.py --base-url "{{ base_url }}"

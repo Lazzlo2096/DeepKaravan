@@ -7,7 +7,7 @@ set shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
 [unix]
 set shell := ["sh", "-eu", "-c"]
 
-service := env("PUPER_TEST_SERVICE", "celery-amd-wsl")
+service := env("PUPER_TEST_SERVICE", "api")
 python := env("PUPER_TEST_PYTHON", if os() == "windows" { ".venv/Scripts/python.exe" } else { ".venv/bin/python" })
 
 # List commands without loading the model.

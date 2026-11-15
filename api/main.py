@@ -1,17 +1,13 @@
 import asyncio
-import logging
 from contextlib import asynccontextmanager
 from uuid import UUID
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
-from redis.exceptions import RedisError
 from starlette.concurrency import run_in_threadpool
 
 from api.service import QueueUnavailable, TaskService
-from common.celery_app import create_celery_app
 from common.config import Settings, get_settings
-from common.jobs import JobStore, create_redis
 from common.schemas import (
     EmbeddingRequest,
     EmbeddingResult,
@@ -21,25 +17,21 @@ from common.schemas import (
 )
 from common.tokenization import InputTooLong, TextValidator, load_tokenizer
 
-logger = logging.getLogger(__name__)
 
-
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, service: TaskService | None = None) -> FastAPI:
     settings = settings or get_settings()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        redis = create_redis(settings)
-        celery = create_celery_app(settings)
+        runtime = service or TaskService(settings)
+        app.state.service = runtime
         try:
-            await run_in_threadpool(redis.ping)
             tokenizer = await run_in_threadpool(load_tokenizer, settings)
             app.state.validator = TextValidator(tokenizer, settings)
-            app.state.service = TaskService(celery, JobStore(redis, settings.result_ttl_seconds))
+            await run_in_threadpool(runtime.start)
             yield
         finally:
-            celery.close()
-            await run_in_threadpool(redis.close)
+            await run_in_threadpool(runtime.close)
 
     app = FastAPI(
         title="DeepKaravan BGE-M3",
@@ -47,11 +39,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description="One FIFO queue for synchronous and asynchronous BGE-M3 inference.",
         lifespan=lifespan,
     )
-
-    @app.exception_handler(RedisError)
-    async def redis_error_handler(request: Request, exc: RedisError):
-        logger.warning("Redis unavailable: %s", type(exc).__name__)
-        return JSONResponse(status_code=503, content={"detail": "Redis is unavailable"})
 
     @app.exception_handler(QueueUnavailable)
     async def queue_error_handler(request: Request, exc: QueueUnavailable):
@@ -104,7 +91,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/health/ready", tags=["health"])
     async def ready(request: Request):
-        await run_in_threadpool(request.app.state.service.store.redis.ping)
+        if not request.app.state.service.ready:
+            raise QueueUnavailable("GPU worker is unavailable")
         return {"status": "ok"}
 
     @app.post(
