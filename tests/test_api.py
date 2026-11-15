@@ -194,6 +194,23 @@ def test_empty_batch_accepted(client, publisher, store):
     assert response.json()["data"] == []
 
 
+@pytest.mark.parametrize("path", ["/api/v1/embeddings", "/api/v1/embeddings/async"])
+@pytest.mark.parametrize("encoding_format", ["float", "base64"])
+def test_encoding_format_accepted_but_ignored(client, publisher, store, path, encoding_format):
+    publisher.callback = lambda task_id, payload: complete(store, task_id, payload)
+    response = client.post(path, json={
+        "model": "baai/bge-m3", "input": ["text"], "encoding_format": encoding_format,
+    })
+    assert response.status_code == (200 if path == "/api/v1/embeddings" else 202)
+    assert publisher.sent[0]["args"][0] == {
+        "input": ["text"], "model": "baai/bge-m3", "embedding_types": ["dense"],
+    }
+    if path.endswith("/async"):
+        response = client.get(response.json()["result_url"])
+        assert response.status_code == 200
+    assert response.json()["data"][0]["embedding"] == [0.1, 0.2]
+
+
 @pytest.mark.parametrize("suffix", ["", "/result"])
 def test_unknown_or_expired_task_is_404(client, suffix):
     assert client.get(f"/api/v1/tasks/{uuid4()}{suffix}").status_code == 404
@@ -248,6 +265,8 @@ def test_health_and_openapi(client):
     assert "const" not in request_schema["properties"]["model"]
     assert "default" not in request_schema["properties"]["model"]
     assert "texts" not in request_schema["properties"]
+    assert request_schema["properties"]["encoding_format"]["enum"] == ["float", "base64"]
+    assert "encoding_format" not in request_schema["required"]
     item_schema = schema["components"]["schemas"]["TextEmbedding"]["properties"]
     assert "embedding" in item_schema
     assert "dense" not in item_schema

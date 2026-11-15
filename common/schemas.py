@@ -19,6 +19,11 @@ class EmbeddingRequest(BaseModel):
     model: Literal["baai/bge-m3"] = Field(
         description='Only "baai/bge-m3" is supported, case-insensitively.'
     )
+    encoding_format: Literal["float", "base64"] = Field(
+        default="float",
+        exclude=True,
+        description="Accepted for compatibility but currently ignored; embeddings remain float arrays.",
+    )
     embedding_types: Annotated[list[EmbeddingType], Field(min_length=1, max_length=3)] = Field(
         default_factory=lambda: [EmbeddingType.DENSE]
     )
