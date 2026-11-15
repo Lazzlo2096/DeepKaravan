@@ -3,7 +3,7 @@ from enum import StrEnum
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, StrictStr, field_validator
 
 
 class EmbeddingType(StrEnum):
@@ -67,8 +67,11 @@ class TaskAccepted(TaskStatus):
 
 
 class TextEmbedding(BaseModel):
+    object: Literal["embedding"] = "embedding"
     index: int
-    dense: list[float] | None = None
+    embedding: list[float] | None = Field(
+        default=None, validation_alias=AliasChoices("embedding", "dense")
+    )
     # Keys are tokenizer token IDs, not decoded words.
     sparse: dict[str, float] | None = None
     colbert: list[list[float]] | None = None

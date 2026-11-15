@@ -1,3 +1,4 @@
+import json
 from uuid import uuid4
 
 from common.schemas import EmbeddingResult, TaskError
@@ -37,3 +38,16 @@ def test_failed_task_expires_and_does_not_have_result(store, redis):
     assert final.status == "failed"
     assert redis.ttl(store.status_key(task_id)) > 0
     assert store.get_result(task_id) is None
+
+
+def test_legacy_dense_result_is_read_as_embedding(store, redis):
+    task_id = uuid4()
+    raw = EmbeddingResult(
+        task_id=task_id, model="BAAI/bge-m3", embedding_types=["dense"], data=[]
+    ).model_dump(mode="json")
+    raw["data"] = [{"index": 0, "dense": [0.1, 0.2]}]
+    redis.set(store.result_key(task_id), json.dumps(raw))
+    result = store.get_result(task_id)
+    assert result.model_dump(mode="json", exclude_none=True)["data"] == [
+        {"object": "embedding", "index": 0, "embedding": [0.1, 0.2]}
+    ]

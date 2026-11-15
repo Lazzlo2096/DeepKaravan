@@ -18,7 +18,9 @@ def complete(store, task_id, payload):
             task_id=UUID(task_id),
             model="BAAI/bge-m3",
             embedding_types=payload["embedding_types"],
-            data=[TextEmbedding(index=i, dense=[0.1, 0.2]) for i in range(len(payload["input"]))],
+            data=[
+                TextEmbedding(index=i, embedding=[0.1, 0.2]) for i in range(len(payload["input"]))
+            ],
         ),
     )
 
@@ -53,7 +55,7 @@ def test_sync_returns_result_when_ready(client, publisher, store, embedding_type
         "model": "baai/bge-m3",
         "embedding_types": ["dense"],
     }
-    assert response.json()["data"] == [{"index": 0, "dense": [0.1, 0.2]}]
+    assert response.json()["data"] == [{"object": "embedding", "index": 0, "embedding": [0.1, 0.2]}]
 
 
 @pytest.mark.parametrize("settings", [{"sync_timeout_seconds": 0.01}], indirect=True)
@@ -89,7 +91,9 @@ def test_sync_waits_through_queue_and_inference_without_timeout(client, publishe
     if failed:
         assert response.json()["detail"]["error"]["code"] == "inference_failed"
     else:
-        assert response.json()["data"] == [{"index": 0, "dense": [0.1, 0.2]}]
+        assert response.json()["data"] == [
+            {"object": "embedding", "index": 0, "embedding": [0.1, 0.2]}
+        ]
 
 
 def test_async_task_can_still_be_polled_until_complete(client, publisher, store):
@@ -104,6 +108,7 @@ def test_async_task_can_still_be_polled_until_complete(client, publisher, store)
     result = client.get(body["result_url"])
     assert result.status_code == 200
     assert result.json()["task_id"] == body["task_id"]
+    assert result.json()["data"] == [{"object": "embedding", "index": 0, "embedding": [0.1, 0.2]}]
 
 
 @pytest.mark.parametrize("path", ["/api/v1/embeddings", "/api/v1/embeddings/async"])
@@ -242,6 +247,10 @@ def test_health_and_openapi(client):
     assert "const" not in request_schema["properties"]["model"]
     assert "default" not in request_schema["properties"]["model"]
     assert "texts" not in request_schema["properties"]
+    item_schema = schema["components"]["schemas"]["TextEmbedding"]["properties"]
+    assert "embedding" in item_schema
+    assert "dense" not in item_schema
+    assert item_schema["object"]["const"] == "embedding"
     assert "202" not in schema["paths"]["/api/v1/embeddings"]["post"]["responses"]
     assert "202" in schema["paths"]["/api/v1/embeddings/async"]["post"]["responses"]
     assert "202" in schema["paths"]["/api/v1/tasks/{task_id}/result"]["get"]["responses"]

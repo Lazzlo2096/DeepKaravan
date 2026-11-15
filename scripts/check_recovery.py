@@ -54,7 +54,7 @@ def main():
         compose("start", "celery-cpu")
         for task in (first, second):
             result = wait_result(base, task["result_url"], 180)
-            assert len(result["data"][0]["dense"]) == 1024
+            assert len(result["data"][0]["embedding"]) == 1024
             for prefix in ("task", "result"):
                 ttl = int(
                     compose(

@@ -171,7 +171,7 @@ def check_result(result, size):
     if not isinstance(data, list) or len(data) != size:
         raise ValueError("Result text count mismatch")
     for index, item in enumerate(data):
-        dense = item.get("dense")
+        dense = item.get("embedding")
         if item.get("index") != index or not isinstance(dense, list) or len(dense) != 1024:
             raise ValueError("Invalid index or dense vector dimension")
         if not all(isinstance(x, (int, float)) and math.isfinite(x) for x in dense):

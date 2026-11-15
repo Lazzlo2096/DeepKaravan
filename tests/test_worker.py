@@ -93,7 +93,16 @@ def test_storage_failure_requeues_without_ack(store, configured_worker, monkeypa
 
 
 @pytest.mark.parametrize(
-    "selected", [["dense"], ["sparse"], ["colbert"], ["dense", "sparse", "colbert"]]
+    "selected",
+    [
+        ["dense"],
+        ["sparse"],
+        ["colbert"],
+        ["dense", "sparse"],
+        ["dense", "colbert"],
+        ["sparse", "colbert"],
+        ["dense", "sparse", "colbert"],
+    ],
 )
 def test_model_flags_and_output_serialization(selected, settings, tokenizer, engine):
     inference = InferenceEngine.__new__(InferenceEngine)
@@ -113,7 +122,11 @@ def test_model_flags_and_output_serialization(selected, settings, tokenizer, eng
     assert flags["return_sparse"] == ("sparse" in selected)
     assert flags["return_colbert_vecs"] == ("colbert" in selected)
     data = result.model_dump(mode="json", exclude_none=True)["data"][0]
-    assert set(data) == {"index", *selected}
+    expected_fields = {"embedding" if kind == "dense" else kind for kind in selected}
+    assert set(data) == {"object", "index", *expected_fields}
+    assert data["object"] == "embedding"
+    if "dense" in selected:
+        assert data["embedding"] == [0.1, 0.2]
 
 
 def test_empty_batch_skips_model(settings, tokenizer, engine):

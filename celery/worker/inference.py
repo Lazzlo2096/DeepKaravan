@@ -77,7 +77,7 @@ class InferenceEngine:
             for index in range(len(request.input)):
                 item = TextEmbedding(index=index)
                 if EmbeddingType.DENSE in selected:
-                    item.dense = output["dense_vecs"][index].tolist()
+                    item.embedding = output["dense_vecs"][index].tolist()
                 if EmbeddingType.SPARSE in selected:
                     item.sparse = {
                         str(token_id): float(weight)

@@ -178,8 +178,10 @@ Docker-образы используют uv 0.11.29; для локальной �
 
 - `embedding_types`, асинхронный метод и `/api/v1/tasks/*` — расширения Karavan.
 - Поддерживается только массив строк в `input`, а не все форматы OpenRouter.
-- Ответ использует `data[].dense`, `sparse`, `colbert`, `task_id` и
-  `embedding_types`; поля `object`, `usage` и `data[].embedding` пока не реализованы.
+- `data[].embedding` содержит dense-вектор, `data[].object` равен `"embedding"`,
+  как в OpenRouter. Поля `sparse`, `colbert`, `task_id` и `embedding_types` —
+  расширения Karavan. Если `dense` не запрошен, `embedding` отсутствует —
+  это тоже расширение. Поля верхнего уровня `object` и `usage` пока не реализованы.
 - Валидация пока возвращает FastAPI `422` с `detail`, тогда как OpenRouter
   документирует `400` с `error.code` и `error.message` для неверных параметров
   ([ошибки OpenRouter](https://openrouter.ai/docs/api/reference/errors-and-debugging)).
@@ -206,10 +208,13 @@ Docker-образы используют uv 0.11.29; для локальной �
 
 Результат `200` содержит `task_id`, `model`, `embedding_types`, `data`:
 
-- `dense`: нормализованный вектор из 1024 чисел;
+- `embedding`: нормализованный dense-вектор из 1024 чисел (для типа `dense`);
 - `sparse`: объект `{ "token_id": weight }`, ключи — строковые ID токенов;
 - `colbert`: массив векторов токенов в формате FlagEmbedding, без CLS и padding.
 
+Каждый элемент `data` также содержит `object: "embedding"` и `index`.
+Поле `data[].dense` переименовано в `data[].embedding`; клиентам нужно обновить
+чтение ответа. Название типа в `embedding_types` остаётся `"dense"`.
 Невыбранные типы отсутствуют в ответе. Ошибка инференса отражается в статусе
 (`error.code`, `error.message`); получение такого результата возвращает `422`.
 Внутренние подробности доступны в логах воркера. При недоступности Redis/очереди API отвечает `503`.

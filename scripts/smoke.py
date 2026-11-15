@@ -54,8 +54,8 @@ def main():
     assert len(result["data"]) == 2
     for i, item in enumerate(result["data"]):
         assert item["index"] == i
-        assert len(item["dense"]) == 1024
-        assert abs(sum(x * x for x in item["dense"]) - 1) < 0.03
+        assert len(item["embedding"]) == 1024
+        assert abs(sum(x * x for x in item["embedding"]) - 1) < 0.03
         assert item["sparse"] and all(key.isdigit() for key in item["sparse"])
         assert item["colbert"] and len(item["colbert"][0]) == 1024
     print("PASS async inference: dense + sparse + ColBERT, two texts, original order")
@@ -67,7 +67,7 @@ def main():
         timeout=args.timeout,
     )
     assert code == 200, (code, result)
-    assert set(result["data"][0]) == {"index", "dense"}
+    assert set(result["data"][0]) == {"object", "index", "embedding"}
     print("PASS synchronous inference and selection of embedding types")
 
     code, result = request(

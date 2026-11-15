@@ -219,12 +219,14 @@ def validate_result(raw, task_id, payload):
         if item.index != index:
             raise ValueError("Result order mismatch")
         for kind in TYPES:
-            if (getattr(item, kind) is not None) != (kind in selected):
+            if (getattr(item, "embedding" if kind == "dense" else kind) is not None) != (
+                kind in selected
+            ):
                 raise ValueError(f"Unexpected/missing {kind}")
-        if item.dense is not None:
-            if len(item.dense) != 1024 or not all(math.isfinite(x) for x in item.dense):
+        if item.embedding is not None:
+            if len(item.embedding) != 1024 or not all(math.isfinite(x) for x in item.embedding):
                 raise ValueError("Invalid dense vector")
-            if abs(sum(x * x for x in item.dense) - 1) > 0.03:
+            if abs(sum(x * x for x in item.embedding) - 1) > 0.03:
                 raise ValueError("Dense vector is not normalized")
         if item.sparse is not None:
             if any(not k.isdigit() or not math.isfinite(v) for k, v in item.sparse.items()):
