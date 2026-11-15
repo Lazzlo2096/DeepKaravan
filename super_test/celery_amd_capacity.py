@@ -93,7 +93,7 @@ def cases(settings, tokenizer, args):
         text, actual = bounded_text(tokenizer, budget)
         yield {
             "name": f"tokens-{budget}_batch-{batch}_{'+'.join(types)}",
-            "payload": {"input": [text] * batch, "embedding_types": types},
+            "payload": {"model": "baai/bge-m3", "input": [text] * batch, "embedding_types": types},
             "text_count": batch,
             "input_tokens": actual * batch,
             "tokens_per_text": actual,
@@ -106,37 +106,67 @@ def cases(settings, tokenizer, args):
     if texts:
         yield {
             "name": "multilingual",
-            "payload": {"input": texts, "embedding_types": list(TYPES)},
+            "payload": {"model": "baai/bge-m3", "input": texts, "embedding_types": list(TYPES)},
             "text_count": len(texts),
             "input_tokens": sum(len(tokenizer.encode(text).ids) for text in texts),
         }
 
 
 def boundary_cases(settings, tokenizer):
-    yield "empty_batch", {"input": [], "embedding_types": ["dense"]}, "succeeded"
-    yield "empty_string", {"input": [""], "embedding_types": list(TYPES)}, "succeeded"
+    yield (
+        "empty_batch",
+        {"model": "baai/bge-m3", "input": [], "embedding_types": ["dense"]},
+        "succeeded",
+    )
+    yield (
+        "empty_string",
+        {"model": "baai/bge-m3", "input": [""], "embedding_types": list(TYPES)},
+        "succeeded",
+    )
     text, actual = bounded_text(tokenizer, settings.max_input_tokens)
     # Do not label a shorter tokenizer-dependent fixture an exact boundary.
     if actual != settings.max_input_tokens:
         raise ValueError(f"Exact token-limit fixture unavailable: got {actual} tokens")
-    yield "exact_token_limit", {"input": [text], "embedding_types": ["dense"]}, "succeeded"
+    yield (
+        "exact_token_limit",
+        {"model": "baai/bge-m3", "input": [text], "embedding_types": ["dense"]},
+        "succeeded",
+    )
     over = text + " hello"
     while len(tokenizer.encode(over).ids) <= settings.max_input_tokens:
         over += " hello"
-    yield "over_token_limit", {"input": [over], "embedding_types": ["dense"]}, "failed"
+    yield (
+        "over_token_limit",
+        {"model": "baai/bge-m3", "input": [over], "embedding_types": ["dense"]},
+        "failed",
+    )
     yield (
         "exact_text_limit",
-        {"input": ["hi"] * settings.max_texts, "embedding_types": ["dense"]},
+        {
+            "model": "baai/bge-m3",
+            "input": ["hi"] * settings.max_texts,
+            "embedding_types": ["dense"],
+        },
         "succeeded",
     )
-    yield "over_text_limit", {"input": ["hi"] * (settings.max_texts + 1)}, "failed"
+    yield (
+        "over_text_limit",
+        {"model": "baai/bge-m3", "input": ["hi"] * (settings.max_texts + 1)},
+        "failed",
+    )
     for name, payload in (
-        ("missing_texts", {}),
-        ("wrong_text_type", {"input": [123]}),
-        ("unknown_embedding", {"input": ["hi"], "embedding_types": ["unknown"]}),
-        ("duplicate_embedding", {"input": ["hi"], "embedding_types": ["dense", "dense"]}),
-        ("empty_embedding_types", {"input": ["hi"], "embedding_types": []}),
-        ("extra_field", {"input": ["hi"], "unexpected": True}),
+        ("missing_input", {"model": "baai/bge-m3"}),
+        ("wrong_text_type", {"model": "baai/bge-m3", "input": [123]}),
+        (
+            "unknown_embedding",
+            {"model": "baai/bge-m3", "input": ["hi"], "embedding_types": ["unknown"]},
+        ),
+        (
+            "duplicate_embedding",
+            {"model": "baai/bge-m3", "input": ["hi"], "embedding_types": ["dense", "dense"]},
+        ),
+        ("empty_embedding_types", {"model": "baai/bge-m3", "input": ["hi"], "embedding_types": []}),
+        ("extra_field", {"model": "baai/bge-m3", "input": ["hi"], "unexpected": True}),
     ):
         yield name, payload, "failed"
 
@@ -474,7 +504,10 @@ def main():
     # Shutdown does not cancel already published work. Finite socket timeouts bound producers.
     pool = ThreadPoolExecutor(max_workers=args.publishers)
     try:
-        warmup = {"name": "warmup", "payload": {"input": ["hi"], "embedding_types": ["dense"]}}
+        warmup = {
+            "name": "warmup",
+            "payload": {"model": "baai/bge-m3", "input": ["hi"], "embedding_types": ["dense"]},
+        }
         result = stage(
             settings, client, broker, publisher, pool, warmup, 1, args, report, single=True
         )

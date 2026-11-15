@@ -147,6 +147,10 @@ Docker-образы используют uv 0.11.29; для локальной �
 
 ## REST API
 
+Базовый URL API: `http://localhost:8000/api/v1`.
+Запрос эмбеддингов: `POST http://localhost:8000/api/v1/embeddings`.
+Маршруты перенесены с `/v1/*` на `/api/v1/*`; клиентам нужно обновить URL.
+
 Одинаковый запрос для обоих режимов:
 
 ```json
@@ -157,20 +161,37 @@ Docker-образы используют uv 0.11.29; для локальной �
 }
 ```
 
-`model` принимает только `"baai/bge-m3"` (с учётом регистра); другое значение
-возвращает `422` до постановки задачи в очередь. Если поле не передано,
-используется `"baai/bge-m3"`.
+`model` и `input` обязательны в обоих режимах, как в
+[контракте OpenRouter](https://openrouter.ai/docs/api/api-reference/embeddings/submit-an-embedding-request).
+`model` принимает только `"baai/bge-m3"` без учёта регистра: например,
+`"BAAI/BGE-M3"` тоже допустимо. При передаче в очередь значение приводится
+к `"baai/bge-m3"`. Это поведение Karavan; регистронезависимость именно
+`POST /embeddings` OpenRouter пока не подтверждена.
+Отсутствие обязательного поля или другое значение модели возвращает `422`
+до постановки задачи в очередь.
 `embedding_types` можно сократить до любой непустой комбинации без повторов.
 Если `embedding_types` не передано, возвращается только `dense`. `input` содержит от 0 до 1024 строк;
 пустой батч допустим и возвращает пустой `data`. Пустая строка тоже допустима.
 Ответ сохраняет порядок текстов, `data[i].index` соответствует индексу во входном батче.
 
+**Текущие расширения и отклонения от OpenRouter:**
+
+- `embedding_types`, асинхронный метод и `/api/v1/tasks/*` — расширения Karavan.
+- Поддерживается только массив строк в `input`, а не все форматы OpenRouter.
+- Ответ использует `data[].dense`, `sparse`, `colbert`, `task_id` и
+  `embedding_types`; поля `object`, `usage` и `data[].embedding` пока не реализованы.
+- Валидация пока возвращает FastAPI `422` с `detail`, тогда как OpenRouter
+  документирует `400` с `error.code` и `error.message` для неверных параметров
+  ([ошибки OpenRouter](https://openrouter.ai/docs/api/reference/errors-and-debugging)).
+
+Полная совместимость не заявляется.
+
 | Метод и путь | Поведение |
 | --- | --- |
-| `POST /v1/embeddings` | Держать HTTP-соединение до завершения задачи; `200` с результатом или ошибка |
-| `POST /v1/embeddings/async` | Поставить в общую очередь; сразу `202` с `task_id` |
-| `GET /v1/tasks/{task_id}` | `200` со статусом и временем создания/завершения |
-| `GET /v1/tasks/{task_id}/result` | `200` с результатом; `202`, если задача ещё выполняется |
+| `POST /api/v1/embeddings` | Держать HTTP-соединение до завершения задачи; `200` с результатом или ошибка |
+| `POST /api/v1/embeddings/async` | Поставить в общую очередь; сразу `202` с `task_id` |
+| `GET /api/v1/tasks/{task_id}` | `200` со статусом и временем создания/завершения |
+| `GET /api/v1/tasks/{task_id}/result` | `200` с результатом; `202`, если задача ещё выполняется |
 | `GET /health/live` | HTTP-процесс работает |
 | `GET /health/ready` | API и токенизатор готовы, Redis доступен; готовность GPU не проверяется |
 
@@ -203,7 +224,7 @@ $body = @{
 } | ConvertTo-Json
 
 $task = Invoke-RestMethod `
-    -Uri http://localhost:8000/v1/embeddings/async `
+    -Uri http://localhost:8000/api/v1/embeddings/async `
     -Method Post -ContentType 'application/json; charset=utf-8' `
     -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
 
@@ -211,7 +232,7 @@ Invoke-RestMethod "http://localhost:8000$($task.status_url)"
 Invoke-RestMethod "http://localhost:8000$($task.result_url)"
 ```
 
-Для синхронного режима отправьте тот же запрос на `/v1/embeddings`.
+Для синхронного режима отправьте тот же запрос на `/api/v1/embeddings`.
 API держит HTTP-соединение всё время ожидания в очереди и выполнения инференса,
 без ограничения длительности запроса на стороне приложения. Ответ `202` с `task_id`
 вместо результата в этом режиме не возвращается. При ошибке задачи возвращается ошибка.

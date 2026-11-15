@@ -202,10 +202,10 @@ def attempt(args, size, text, record):
     try:
         code, data, byte_count = request(
             args.base_url,
-            "/v1/embeddings",
+            "/api/v1/embeddings",
             deadline,
             args.request_timeout,
-            {"input": [text] * size, "embedding_types": ["dense"]},
+            {"model": "baai/bge-m3", "input": [text] * size, "embedding_types": ["dense"]},
         )
         record["submit_http_status"] = code
         record["submit_seconds"] = time.perf_counter() - started
@@ -296,7 +296,7 @@ def main():
         "started_at": datetime.now(UTC).isoformat(),
         "status": "running",
         "base_url": args.base_url,
-        "endpoint": "/v1/embeddings",
+        "endpoint": "/api/v1/embeddings",
         "embedding_type": "dense",
         "embedding_dimension": 1024,
         "batch_sizes": args.batch_sizes,

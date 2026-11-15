@@ -41,8 +41,9 @@ def main():
 
     code, accepted = request(
         base,
-        "/v1/embeddings/async",
+        "/api/v1/embeddings/async",
         {
+            "model": "baai/bge-m3",
             "input": ["Привет, мир", "Search across documents"],
             "embedding_types": ["dense", "sparse", "colbert"],
         },
@@ -61,19 +62,23 @@ def main():
 
     code, result = request(
         base,
-        "/v1/embeddings",
-        {"input": ["Проверка"]},
+        "/api/v1/embeddings",
+        {"model": "baai/bge-m3", "input": ["Проверка"]},
         timeout=args.timeout,
     )
     assert code == 200, (code, result)
     assert set(result["data"][0]) == {"index", "dense"}
     print("PASS synchronous inference and selection of embedding types")
 
-    code, result = request(base, "/v1/embeddings", {"input": []}, timeout=args.timeout)
+    code, result = request(
+        base, "/api/v1/embeddings", {"model": "baai/bge-m3", "input": []}, timeout=args.timeout
+    )
     assert code == 200 and result["data"] == [], (code, result)
     print("PASS empty batch")
 
-    code, error = request(base, "/v1/embeddings/async", {"input": ["hello " * 9000]})
+    code, error = request(
+        base, "/api/v1/embeddings/async", {"model": "baai/bge-m3", "input": ["hello " * 9000]}
+    )
     assert code == 422 and error["detail"]["code"] == "text_too_long", (code, error)
     print("PASS long text rejected before enqueue")
 

@@ -74,7 +74,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return await run_in_threadpool(request.app.state.service.submit, payload)
 
     def accepted(task: TaskStatus, response: Response) -> TaskAccepted:
-        status_url = f"/v1/tasks/{task.task_id}"
+        status_url = f"/api/v1/tasks/{task.task_id}"
         result_url = f"{status_url}/result"
         response.status_code = status.HTTP_202_ACCEPTED
         response.headers["Location"] = status_url
@@ -108,7 +108,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"status": "ok"}
 
     @app.post(
-        "/v1/embeddings/async",
+        "/api/v1/embeddings/async",
         response_model=TaskAccepted,
         status_code=202,
         tags=["embeddings"],
@@ -118,7 +118,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return accepted(task, response)
 
     @app.post(
-        "/v1/embeddings",
+        "/api/v1/embeddings",
         response_model=EmbeddingResult,
         response_model_exclude_none=True,
         tags=["embeddings"],
@@ -131,12 +131,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 return await completed_result(request, task)
             await asyncio.sleep(settings.poll_interval_seconds)
 
-    @app.get("/v1/tasks/{task_id}", response_model=TaskStatus, tags=["tasks"])
+    @app.get("/api/v1/tasks/{task_id}", response_model=TaskStatus, tags=["tasks"])
     async def task_status(task_id: UUID, request: Request):
         return await get_status(request, task_id)
 
     @app.get(
-        "/v1/tasks/{task_id}/result",
+        "/api/v1/tasks/{task_id}/result",
         response_model=EmbeddingResult,
         response_model_exclude_none=True,
         responses={202: {"model": TaskAccepted}},

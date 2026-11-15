@@ -26,7 +26,7 @@ def main():
     parser.add_argument("--base-url", default="http://localhost:8000")
     args = parser.parse_args()
     base = args.base_url.rstrip("/")
-    payload = {"input": ["Recovery check"], "embedding_types": ["dense"]}
+    payload = {"model": "baai/bge-m3", "input": ["Recovery check"], "embedding_types": ["dense"]}
     existing = subprocess.run(
         ["docker", "container", "inspect", RECOVERY_CONTAINER],
         cwd=ROOT,
@@ -39,9 +39,9 @@ def main():
 
     try:
         compose("stop", "--timeout", "10", "celery-cpu")
-        code, first = request(base, "/v1/embeddings/async", payload)
+        code, first = request(base, "/api/v1/embeddings/async", payload)
         assert code == 202, (code, first)
-        code, second = request(base, "/v1/embeddings/async", payload)
+        code, second = request(base, "/api/v1/embeddings/async", payload)
         assert code == 202, (code, second)
 
         compose("restart", "redis")
@@ -76,8 +76,12 @@ def main():
 
         code, interrupted = request(
             base,
-            "/v1/embeddings/async",
-            {"input": ["recovery " * 256] * 32, "embedding_types": ["dense"]},
+            "/api/v1/embeddings/async",
+            {
+                "model": "baai/bge-m3",
+                "input": ["recovery " * 256] * 32,
+                "embedding_types": ["dense"],
+            },
         )
         assert code == 202
         deadline = time.monotonic() + 30

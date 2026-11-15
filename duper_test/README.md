@@ -51,10 +51,10 @@ python duper_test/batch_embeddings.py --base-url http://localhost:8000 --repeats
 
 ## Как выполняется замер
 
-Каждая попытка отправляет **один** `POST /v1/embeddings`:
+Каждая попытка отправляет **один** `POST /api/v1/embeddings`:
 
 ```json
-{"input": ["одинаковый текст", "одинаковый текст"], "embedding_types": ["dense"]}
+{"model": "baai/bge-m3", "input": ["одинаковый текст", "одинаковый текст"], "embedding_types": ["dense"]}
 ```
 
 Успех — только `200` с готовыми эмбеддингами в ответе на POST.

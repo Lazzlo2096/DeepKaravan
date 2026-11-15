@@ -16,10 +16,17 @@ class EmbeddingRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     input: Annotated[list[StrictStr], Field(max_length=1024)]
-    model: Literal["baai/bge-m3"] = "baai/bge-m3"
+    model: Literal["baai/bge-m3"] = Field(
+        description='Only "baai/bge-m3" is supported, case-insensitively.'
+    )
     embedding_types: Annotated[list[EmbeddingType], Field(min_length=1, max_length=3)] = Field(
         default_factory=lambda: [EmbeddingType.DENSE]
     )
+
+    @field_validator("model", mode="before", json_schema_input_type=str)
+    @classmethod
+    def normalize_model(cls, value: object) -> object:
+        return value.lower() if isinstance(value, str) else value
 
     @field_validator("embedding_types")
     @classmethod
