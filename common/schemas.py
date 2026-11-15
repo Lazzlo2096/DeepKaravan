@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
@@ -16,6 +16,7 @@ class EmbeddingRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     input: Annotated[list[StrictStr], Field(max_length=1024)]
+    model: Literal["baai/bge-m3"] = "baai/bge-m3"
     embedding_types: Annotated[list[EmbeddingType], Field(min_length=1, max_length=3)] = Field(
         default_factory=lambda: [EmbeddingType.DENSE]
     )

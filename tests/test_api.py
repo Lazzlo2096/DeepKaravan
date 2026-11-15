@@ -36,15 +36,22 @@ def test_async_accepts_and_uses_shared_queue(client, publisher, store):
 
 
 @pytest.mark.parametrize("embedding_types", [None, ["dense"]])
-def test_sync_returns_result_when_ready(client, publisher, store, embedding_types):
+@pytest.mark.parametrize("model", [None, "baai/bge-m3"])
+def test_sync_returns_result_when_ready(client, publisher, store, embedding_types, model):
     publisher.callback = lambda task_id, payload: complete(store, task_id, payload)
     payload = {"input": ["text"]}
+    if model is not None:
+        payload["model"] = model
     if embedding_types is not None:
         payload["embedding_types"] = embedding_types
     response = client.post("/v1/embeddings", json=payload)
     assert response.status_code == 200
     assert response.json()["embedding_types"] == ["dense"]
-    assert publisher.sent[0]["args"][0] == {"input": ["text"], "embedding_types": ["dense"]}
+    assert publisher.sent[0]["args"][0] == {
+        "input": ["text"],
+        "model": "baai/bge-m3",
+        "embedding_types": ["dense"],
+    }
     assert response.json()["data"] == [{"index": 0, "dense": [0.1, 0.2]}]
 
 
@@ -134,6 +141,21 @@ def test_invalid_request_rejected(client, publisher, payload, path):
     assert publisher.sent == []
 
 
+@pytest.mark.parametrize("path", ["/v1/embeddings", "/v1/embeddings/async"])
+@pytest.mark.parametrize("model", ["other-model", "BAAI/bge-m3", "", None, 123, ["baai/bge-m3"]])
+def test_unsupported_model_rejected_before_enqueue(client, publisher, path, model):
+    response = client.post(path, json={"input": ["text"], "model": model})
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "model"]
+    assert publisher.sent == []
+
+
+def test_async_accepts_explicit_model(client, publisher):
+    response = client.post("/v1/embeddings/async", json={"input": ["text"], "model": "baai/bge-m3"})
+    assert response.status_code == 202
+    assert publisher.sent[0]["args"][0]["model"] == "baai/bge-m3"
+
+
 def test_empty_batch_accepted(client, publisher, store):
     publisher.callback = lambda task_id, payload: complete(store, task_id, payload)
     response = client.post("/v1/embeddings", json={"input": []})
@@ -184,6 +206,8 @@ def test_health_and_openapi(client):
     schema = client.get("/openapi.json").json()
     request_schema = schema["components"]["schemas"]["EmbeddingRequest"]
     assert request_schema["required"] == ["input"]
+    assert request_schema["properties"]["model"]["const"] == "baai/bge-m3"
+    assert request_schema["properties"]["model"]["default"] == "baai/bge-m3"
     assert "texts" not in request_schema["properties"]
     assert "202" not in schema["paths"]["/v1/embeddings"]["post"]["responses"]
     assert "202" in schema["paths"]["/v1/embeddings/async"]["post"]["responses"]
